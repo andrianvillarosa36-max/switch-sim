@@ -1,0 +1,36 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test the switch engine
+        run: node tests/engine.test.js
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Installs Gradle 8.7 (needed by Android Gradle Plugin 8.5.x), so no
+      # gradlew wrapper has to be committed.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        run: gradle assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SwitchSim-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk

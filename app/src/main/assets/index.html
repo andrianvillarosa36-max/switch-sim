@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Switch Sim</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <h1 class="brand">Switch Sim</h1>
+      <div class="tabs" role="tablist" aria-label="Sections">
+        <button id="tab-lab" type="button" role="tab" aria-selected="true" aria-controls="view-lab">Lab</button>
+        <button id="tab-quiz" type="button" role="tab" aria-selected="false" aria-controls="view-quiz">Quiz</button>
+      </div>
+      <button id="reset" class="ghost" type="button">Reset</button>
+    </header>
+
+    <section id="view-lab" class="lab" role="tabpanel" aria-labelledby="tab-lab">
+      <div class="panel">
+        <button id="taskbar" class="taskbar" type="button" aria-expanded="false" aria-controls="steps">
+          <span class="leds" id="leds" aria-hidden="true"></span>
+          <span class="tasktext">
+            <span class="count" id="count"></span>
+            <span class="task" id="task"></span>
+          </span>
+          <span class="chev" aria-hidden="true"></span>
+        </button>
+        <div id="steps" class="steps" hidden>
+          <p class="mission" id="mission"></p>
+          <ol id="steplist"></ol>
+          <button id="hintbtn" class="ghost hintbtn" type="button">Show hint</button>
+          <p class="hint" id="hint" hidden></p>
+        </div>
+      </div>
+
+      <div id="terminal" class="screen" role="log" aria-label="Switch console"></div>
+
+      <div class="keys">
+        <button id="key-tab" type="button" aria-label="Complete word">Tab</button>
+        <button id="key-help" type="button" aria-label="Show help">?</button>
+        <button id="key-up" type="button" aria-label="Previous command">&uarr;</button>
+        <button id="key-down" type="button" aria-label="Next command">&darr;</button>
+        <span id="syst" class="syst" aria-live="polite"></span>
+      </div>
+
+      <form id="line" class="entry" autocomplete="off">
+        <label for="cmd" id="prompt" class="prompt">Switch&gt;</label>
+        <input id="cmd" name="cmd" type="text" autocomplete="off" autocapitalize="none"
+               autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command">
+        <button type="submit" class="send">Enter</button>
+      </form>
+    </section>
+
+    <section id="view-quiz" class="view" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+      <h2 id="quiz-title">Quiz</h2>
+      <p class="lede">Pick one answer for each question, then check.</p>
+      <div id="quiz-list"></div>
+      <div class="quizbar">
+        <button id="check" class="send" type="button">Check answers</button>
+        <span id="score" class="score" aria-live="polite"></span>
+      </div>
+    </section>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="lesson1.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
