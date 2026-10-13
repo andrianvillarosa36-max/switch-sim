@@ -13,8 +13,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test the switch engine
-        run: node tests/engine.test.js
+      - name: Test the switch engine and network model
+        run: |
+          node tests/engine.test.js
+          node tests/network.test.js
 
       - uses: actions/setup-java@v4
         with:

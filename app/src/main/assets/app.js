@@ -2,107 +2,120 @@
   'use strict';
 
   var LESSON = window.LESSON;
-  var STORE = 'switchsim.lesson1.v1';
+  var KEY = 'switchsim.v2';
+  var OLD_KEY = 'switchsim.lesson1.v1';   // single-switch version: lesson progress is migrated
   var $ = function (id) { return document.getElementById(id); };
 
-  var term = $('terminal');
-  var cmd = $('cmd');
-  var promptEl = $('prompt');
-
-  var sw;                 // the simulated switch
-  var done = [];          // sticky per-step completion
-  var hist = [];          // command history
-  var hi = 0;             // history cursor
+  var lesson = { sw: null, term: null, done: [] };
+  var lessonView, devView, topo;
+  var consoleDev = null;       // device whose console is open, if any
   var hintOpen = false;
-  var lastCur;            // previous current step (to detect lab completion)
-  var resetTimer = null;
+  var lastCur;                 // previous current lesson step, to detect completion
+  var resetTimer = 0;
   var quizChecked = false;
 
-  /* ---------- storage (never fatal) ---------- */
+  /* ---------- saving (never fatal) ---------- */
 
-  function loadSaved() {
-    try { return JSON.parse(localStorage.getItem(STORE)); } catch (e) { return null; }
-  }
-  function persist() {
-    try { localStorage.setItem(STORE, JSON.stringify({ sw: sw.toJSON(), done: done })); } catch (e) { /* ignore */ }
-  }
-  function forget() {
-    try { localStorage.removeItem(STORE); } catch (e) { /* ignore */ }
+  function read(key) {
+    try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
   }
 
-  /* ---------- terminal output ---------- */
-
-  function classify(t) {
-    if (t.charAt(0) === '%' || /^\s*\^$/.test(t)) return 'err';
-    return '';
+  function loadState() {
+    var s = read(KEY);
+    if (s) return s;
+    var old = read(OLD_KEY);
+    return old ? { lesson: old, net: null } : null;
   }
 
-  function line(text, cls) {
-    var d = document.createElement('div');
-    d.className = 'line ' + (cls || '');
-    d.textContent = text === '' ? ' ' : text;
-    term.appendChild(d);
+  function saveAll() {
+    try {
+      localStorage.setItem(KEY, JSON.stringify({
+        lesson: { sw: lesson.sw.toJSON(), done: lesson.done },
+        net: topo.toJSON()
+      }));
+    } catch (e) { /* storage unavailable: keep going */ }
   }
 
-  function echo(prompt, text) {
-    var d = document.createElement('div');
-    d.className = 'line echo';
-    var p = document.createElement('span');
-    p.className = 'p';
-    p.textContent = prompt;
-    var c = document.createElement('span');
-    c.className = 'c';
-    c.textContent = text;
-    d.appendChild(p);
-    d.appendChild(c);
-    term.appendChild(d);
+  /* ---------- tabs and screens ---------- */
+
+  function showTab(name) {
+    var net = name === 'net';
+    $('view-net').hidden = !(net && !consoleDev);
+    $('view-console').hidden = !(net && consoleDev);
+    $('view-lab').hidden = name !== 'lab';
+    $('view-quiz').hidden = name !== 'quiz';
+    ['net', 'lab', 'quiz'].forEach(function (n) {
+      $('tab-' + n).setAttribute('aria-selected', String(n === name));
+    });
+    if (net && !consoleDev) { topo.ensureView(); topo.render(); }
   }
 
-  function printAll(lines) {
-    lines.forEach(function (t) { line(t, classify(t)); });
+  function currentTab() {
+    return $('tab-lab').getAttribute('aria-selected') === 'true' ? 'lab'
+      : $('tab-quiz').getAttribute('aria-selected') === 'true' ? 'quiz' : 'net';
   }
 
-  function scrollDown() {
-    while (term.childNodes.length > 600) term.removeChild(term.firstChild);
-    term.scrollTop = term.scrollHeight;
+  /* ---------- device consoles ---------- */
+
+  function openConsole(dev) {
+    consoleDev = dev;
+    $('console-title').textContent = dev.name + ' console';
+    devView.attach(dev.term);
+    showTab('net');
+    location.hash = 'console';      // gives the Android back button something to pop
+    devView.focus();
   }
 
-  /* ---------- lab progress ---------- */
+  function closeConsole() {
+    consoleDev = null;
+    showTab('net');
+  }
+
+  window.addEventListener('hashchange', function () {
+    if (location.hash !== '#console' && consoleDev) closeConsole();
+  });
+
+  $('console-back').addEventListener('click', function () {
+    if (location.hash === '#console') history.back(); else closeConsole();
+  });
+
+  /* ---------- lesson ---------- */
+
+  function evaluate() {
+    LESSON.steps.forEach(function (s, i) {
+      if (!lesson.done[i] && s.done(lesson.sw)) lesson.done[i] = true;
+    });
+  }
 
   function currentStep() {
-    for (var i = 0; i < done.length; i++) if (!done[i]) return i;
+    for (var i = 0; i < lesson.done.length; i++) if (!lesson.done[i]) return i;
     return -1;
   }
 
-  function evaluate() {
-    LESSON.steps.forEach(function (s, i) { if (!done[i] && s.done(sw)) done[i] = true; });
-  }
-
   function renderSteps() {
-    var cur = currentStep();
-    var total = LESSON.steps.length;
+    var cur = currentStep(), total = LESSON.steps.length;
     if (cur !== lastCur) hintOpen = false;
 
     var leds = $('leds');
     leds.textContent = '';
     LESSON.steps.forEach(function (s, i) {
       var d = document.createElement('span');
-      d.className = 'led' + (done[i] ? ' on' : i === cur ? ' now' : '');
+      d.className = 'led' + (lesson.done[i] ? ' on' : i === cur ? ' now' : '');
       leds.appendChild(d);
     });
 
     $('count').textContent = cur === -1 ? 'Lab complete' : 'Step ' + (cur + 1) + ' of ' + total;
-    $('task').textContent = cur === -1 ? 'All steps done. Try the quiz.' : LESSON.steps[cur].task;
+    $('task').textContent = cur === -1 ? 'All steps done' : LESSON.steps[cur].task;
     $('mission').textContent = LESSON.mission;
 
     var ol = $('steplist');
     ol.textContent = '';
     LESSON.steps.forEach(function (s, i) {
       var li = document.createElement('li');
-      li.className = done[i] ? 'done' : i === cur ? 'cur' : '';
+      li.className = lesson.done[i] ? 'done' : i === cur ? 'cur' : '';
       var sr = document.createElement('span');
       sr.className = 'sr';
-      sr.textContent = done[i] ? 'Done: ' : i === cur ? 'Next: ' : 'To do: ';
+      sr.textContent = lesson.done[i] ? 'Done: ' : i === cur ? 'Next: ' : 'To do: ';
       li.appendChild(sr);
       li.appendChild(document.createTextNode(s.task));
       ol.appendChild(li);
@@ -115,107 +128,45 @@
     $('hint').textContent = showHint ? LESSON.steps[cur].hint : '';
 
     if (lastCur !== undefined && lastCur !== -1 && cur === -1) {
-      line('Lab complete. Open the Quiz tab to check what you learned.', 'ok');
+      lessonView.note('Lab complete. Open the Quiz tab to check what you learned.', 'ok');
     }
     lastCur = cur;
   }
 
-  function renderSyst() {
-    var el = $('syst');
-    if (sw.dirty) { el.textContent = 'Unsaved config'; el.className = 'syst warn'; }
-    else if (sw.startup) { el.textContent = 'Config saved'; el.className = 'syst ok'; }
-    else { el.textContent = 'Nothing configured'; el.className = 'syst'; }
-  }
-
-  function refresh() {
-    var p = sw.prompt;
-    promptEl.textContent = p;
-    promptEl.classList.toggle('long', p.length > 18);
-    var secret = sw.secretInput;
-    var wantType = secret ? 'password' : 'text';
-    if (cmd.type !== wantType) cmd.type = wantType;
-    cmd.setAttribute('autocomplete', secret ? 'new-password' : 'off');
+  function lessonAfter() {
     evaluate();
     renderSteps();
-    renderSyst();
-    persist();
+    saveAll();
   }
 
-  /* ---------- input handling ---------- */
-
-  function onSubmit(e) {
-    e.preventDefault();
-    var text = cmd.value;
-    var secret = sw.secretInput;
-    var wasPending = !!sw.pending;
-    echo(sw.prompt, secret ? '' : text);
-    if (!wasPending && text.trim()) hist.push(text);
-    hi = hist.length;
-    printAll(sw.exec(text));
-    cmd.value = '';
-    refresh();
-    scrollDown();
-    cmd.focus();
+  function startLesson(saved) {
+    lesson.sw = new window.SwitchSim(saved && saved.sw);
+    lesson.term = window.Network.target(lesson.sw);
+    lesson.done = LESSON.steps.map(function (s, i) { return !!(saved && saved.done && saved.done[i]); });
+    lastCur = undefined;
+    lessonView.attach(lesson.term);
+    if (saved && (lesson.done.some(Boolean) || lesson.sw.startup || lesson.sw.dirty)) {
+      lessonView.note('Previous session restored. Reset lab starts a fresh switch.');
+    }
+    evaluate();
+    renderSteps();
   }
 
-  function histMove(d) {
-    if (sw.secretInput || !hist.length) return;
-    hi = Math.min(Math.max(hi + d, 0), hist.length);
-    cmd.value = hi === hist.length ? '' : hist[hi];
-    var n = cmd.value.length;
-    cmd.setSelectionRange(n, n);
-  }
-
-  function onTab() {
-    cmd.value = sw.complete(cmd.value);
-    var n = cmd.value.length;
-    cmd.setSelectionRange(n, n);
-    cmd.focus();
-  }
-
-  function onHelp() {
-    if (sw.pending) return;
-    echo(sw.prompt, cmd.value + '?');
-    printAll(sw.help(cmd.value));
-    scrollDown();
-    cmd.focus();
-  }
-
-  /* ---------- tabs, drawer, reset ---------- */
-
-  function showTab(name) {
-    var lab = name === 'lab';
-    $('view-lab').hidden = !lab;
-    $('view-quiz').hidden = lab;
-    $('tab-lab').setAttribute('aria-selected', String(lab));
-    $('tab-quiz').setAttribute('aria-selected', String(!lab));
-  }
-
-  function toggleDrawer() {
-    var open = $('taskbar').getAttribute('aria-expanded') !== 'true';
-    $('taskbar').setAttribute('aria-expanded', String(open));
-    $('steps').hidden = !open;
-  }
-
-  function onReset() {
-    var b = $('reset');
+  function onLabReset() {
+    var b = $('lab-reset');
     if (b.getAttribute('data-armed') === '1') {
       clearTimeout(resetTimer);
       b.setAttribute('data-armed', '0');
-      b.textContent = 'Reset';
-      forget();
-      hist = [];
-      hi = 0;
-      lastCur = undefined;
-      renderQuiz();
-      start(null);
+      b.textContent = 'Reset lab';
+      startLesson(null);
+      saveAll();
       return;
     }
     b.setAttribute('data-armed', '1');
     b.textContent = 'Tap to confirm';
     resetTimer = setTimeout(function () {
       b.setAttribute('data-armed', '0');
-      b.textContent = 'Reset';
+      b.textContent = 'Reset lab';
     }, 3000);
   }
 
@@ -287,39 +238,39 @@
 
   /* ---------- boot ---------- */
 
-  function start(saved) {
-    sw = new window.SwitchSim(saved && saved.sw);
-    done = LESSON.steps.map(function (s, i) { return !!(saved && saved.done && saved.done[i]); });
-    term.textContent = '';
-    line('Simulated switch console. Type ? for help.', 'dim');
-    if (saved && (done.some(Boolean) || sw.startup || sw.dirty)) {
-      line('Previous session restored. Reset starts a fresh switch.', 'dim');
-    }
-    refresh();
-    scrollDown();
+  function boot() {
+    var saved = loadState();
+
+    devView = new window.TerminalView($('console-host'), { onCommand: saveAll });
+    lessonView = new window.TerminalView($('lab-host'), { onCommand: lessonAfter });
+
+    topo = new window.Topology({
+      svg: $('net'), world: $('world'), links: $('layer-links'), devs: $('layer-devs'),
+      bar: $('netbar'), toolbar: $('toolbar'),
+      cable: $('tool-cable'), addSwitch: $('add-switch'), addPc: $('add-pc'),
+      clear: $('net-clear'), fit: $('net-fit')
+    }, { onChange: saveAll, openConsole: openConsole });
+    if (saved && saved.net) topo.load(saved.net);
+
+    startLesson(saved && saved.lesson);
+    renderQuiz();
+
+    $('tab-net').addEventListener('click', function () { showTab('net'); });
+    $('tab-lab').addEventListener('click', function () { showTab('lab'); });
+    $('tab-quiz').addEventListener('click', function () { showTab('quiz'); });
+    $('taskbar').addEventListener('click', function () {
+      var open = $('taskbar').getAttribute('aria-expanded') !== 'true';
+      $('taskbar').setAttribute('aria-expanded', String(open));
+      $('steps').hidden = !open;
+    });
+    $('hintbtn').addEventListener('click', function () { hintOpen = !hintOpen; renderSteps(); });
+    $('lab-reset').addEventListener('click', onLabReset);
+    $('check').addEventListener('click', checkQuiz);
+
+    window.addEventListener('resize', function () { if (currentTab() === 'net' && !consoleDev) topo.ensureView(); });
+
+    showTab('net');
   }
 
-  // Keep the keyboard open when tapping the helper keys.
-  Array.prototype.forEach.call(document.querySelectorAll('.keys button'), function (b) {
-    b.addEventListener('mousedown', function (e) { e.preventDefault(); });
-  });
-
-  $('line').addEventListener('submit', onSubmit);
-  $('key-tab').addEventListener('click', onTab);
-  $('key-help').addEventListener('click', onHelp);
-  $('key-up').addEventListener('click', function () { histMove(-1); cmd.focus(); });
-  $('key-down').addEventListener('click', function () { histMove(1); cmd.focus(); });
-  $('taskbar').addEventListener('click', toggleDrawer);
-  $('hintbtn').addEventListener('click', function () { hintOpen = !hintOpen; renderSteps(); });
-  $('tab-lab').addEventListener('click', function () { showTab('lab'); });
-  $('tab-quiz').addEventListener('click', function () { showTab('quiz'); });
-  $('reset').addEventListener('click', onReset);
-  $('check').addEventListener('click', checkQuiz);
-  term.addEventListener('click', function () {
-    var sel = window.getSelection && window.getSelection().toString();
-    if (!sel) cmd.focus();
-  });
-
-  renderQuiz();
-  start(loadSaved());
+  boot();
 })();

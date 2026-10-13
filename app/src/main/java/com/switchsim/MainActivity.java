@@ -32,6 +32,16 @@ public class MainActivity extends Activity {
         }
     }
 
+    // Back closes an open console (the page pushes a history entry for it), otherwise leaves the app.
+    @Override
+    public void onBackPressed() {
+        if (web != null && web.canGoBack()) {
+            web.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);

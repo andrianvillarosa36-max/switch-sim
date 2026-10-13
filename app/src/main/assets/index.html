@@ -12,13 +12,45 @@
     <header class="top">
       <h1 class="brand">Switch Sim</h1>
       <div class="tabs" role="tablist" aria-label="Sections">
-        <button id="tab-lab" type="button" role="tab" aria-selected="true" aria-controls="view-lab">Lab</button>
+        <button id="tab-net" type="button" role="tab" aria-selected="true" aria-controls="view-net">Network</button>
+        <button id="tab-lab" type="button" role="tab" aria-selected="false" aria-controls="view-lab">Lesson</button>
         <button id="tab-quiz" type="button" role="tab" aria-selected="false" aria-controls="view-quiz">Quiz</button>
       </div>
-      <button id="reset" class="ghost" type="button">Reset</button>
     </header>
 
-    <section id="view-lab" class="lab" role="tabpanel" aria-labelledby="tab-lab">
+    <!-- Network: topology canvas -->
+    <section id="view-net" class="net" role="tabpanel" aria-labelledby="tab-net">
+      <div id="toolbar" class="toolbar" role="toolbar" aria-label="Network tools">
+        <button id="add-switch" class="tool" type="button"><span class="ico" data-icon="switch"></span>Switch</button>
+        <button id="add-pc" class="tool" type="button"><span class="ico" data-icon="pc"></span>PC</button>
+        <button id="tool-cable" class="tool" type="button" aria-pressed="false"><span class="ico" data-icon="cable"></span>Cable</button>
+      </div>
+      <div class="canvaswrap">
+        <svg id="net" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Network topology">
+          <g id="world">
+            <g id="layer-links"></g>
+            <g id="layer-devs"></g>
+          </g>
+        </svg>
+        <div class="canvastools">
+          <button id="net-fit" class="ghost" type="button">Fit</button>
+          <button id="net-clear" class="ghost" type="button">Clear</button>
+        </div>
+      </div>
+      <div id="netbar" class="netbar"></div>
+    </section>
+
+    <!-- Network: one device's console -->
+    <section id="view-console" class="consoleview" hidden>
+      <div class="consolebar">
+        <button id="console-back" class="ghost" type="button">Back</button>
+        <span id="console-title" class="ctitle"></span>
+      </div>
+      <div id="console-host" class="consolehost"></div>
+    </section>
+
+    <!-- Lesson: guided lab on a single switch -->
+    <section id="view-lab" class="lab" role="tabpanel" aria-labelledby="tab-lab" hidden>
       <div class="panel">
         <button id="taskbar" class="taskbar" type="button" aria-expanded="false" aria-controls="steps">
           <span class="leds" id="leds" aria-hidden="true"></span>
@@ -31,29 +63,17 @@
         <div id="steps" class="steps" hidden>
           <p class="mission" id="mission"></p>
           <ol id="steplist"></ol>
-          <button id="hintbtn" class="ghost hintbtn" type="button">Show hint</button>
+          <div class="steprow">
+            <button id="hintbtn" class="ghost" type="button">Show hint</button>
+            <button id="lab-reset" class="ghost" type="button">Reset lab</button>
+          </div>
           <p class="hint" id="hint" hidden></p>
         </div>
       </div>
-
-      <div id="terminal" class="screen" role="log" aria-label="Switch console"></div>
-
-      <div class="keys">
-        <button id="key-tab" type="button" aria-label="Complete word">Tab</button>
-        <button id="key-help" type="button" aria-label="Show help">?</button>
-        <button id="key-up" type="button" aria-label="Previous command">&uarr;</button>
-        <button id="key-down" type="button" aria-label="Next command">&darr;</button>
-        <span id="syst" class="syst" aria-live="polite"></span>
-      </div>
-
-      <form id="line" class="entry" autocomplete="off">
-        <label for="cmd" id="prompt" class="prompt">Switch&gt;</label>
-        <input id="cmd" name="cmd" type="text" autocomplete="off" autocapitalize="none"
-               autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Command">
-        <button type="submit" class="send">Enter</button>
-      </form>
+      <div id="lab-host" class="consolehost"></div>
     </section>
 
+    <!-- Quiz -->
     <section id="view-quiz" class="view" role="tabpanel" aria-labelledby="tab-quiz" hidden>
       <h2 id="quiz-title">Quiz</h2>
       <p class="lede">Pick one answer for each question, then check.</p>
@@ -66,7 +86,10 @@
   </div>
 
   <script src="engine.js"></script>
+  <script src="network.js"></script>
   <script src="lesson1.js"></script>
+  <script src="terminal.js"></script>
+  <script src="topology.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
