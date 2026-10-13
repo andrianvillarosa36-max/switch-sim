@@ -3,9 +3,11 @@
  * No drawing code lives here, so it runs in Node tests too. Later stages
  * (PC addressing, ping, VLANs) extend this model.
  *
- * Device: { id, type: 'switch' | 'pc', name, x, y, sw?, term? }
- *   sw   - the simulated switch (SwitchSim) for switches
- *   term - that switch's console state { sw, log, hist, hi }
+ * Device: { id, type: 'switch' | 'pc', name, x, y, ... }
+ *   switch: sw (SwitchSim), term (console state)
+ *   pc:     cfg { ip, mask, gateway }, mac, arp (cache, not saved),
+ *           shell (command prompt), term (console state)
+ *   term - { sw, log, hist, hi }: the thing a console is attached to
  * Link:   { id, a: { dev, port }, b: { dev, port } }
  */
 (function (root) {
@@ -24,8 +26,16 @@
   function portsOf(type) { return TYPES[type] || []; }
   function shortPort(name) { return name.replace('FastEthernet', 'Fa').replace('GigabitEthernet', 'Gi'); }
 
-  // A console's state: the switch plus its scrollback and command history.
+  // A console's state: the shell (switch or PC) plus scrollback and command history.
   function target(sw) { return { sw: sw, log: [], hist: [], hi: 0 }; }
+
+  function hex4(n) { var h = (n & 0xffff).toString(16); while (h.length < 4) h = '0' + h; return h; }
+
+  // A stable, unique MAC address per device (the last group is the device number).
+  function macFor(id) {
+    var n = parseInt(String(id).slice(1), 10) || 0;
+    return '0001.' + hex4(Math.imul(n + 7, 2654435761) >>> 16) + '.' + hex4(n);
+  }
 
   function Network(data) {
     this.devices = [];
@@ -62,9 +72,56 @@
   Network.prototype.add = function (type, x, y) {
     if (!TYPES[type]) throw new Error('Unknown device type: ' + type);
     var d = { id: 'd' + (this.nextId++), type: type, name: this.freshName(type), x: x, y: y };
-    if (type === 'switch') { d.sw = new root.SwitchSim(); d.term = target(d.sw); }
+    this._equip(d, null);
     this.devices.push(d);
     return d;
+  };
+
+  // Give a device its simulated internals. data = saved state or null.
+  Network.prototype._equip = function (d, data) {
+    var self = this;
+    if (d.type === 'switch') {
+      d.sw = new root.SwitchSim(data && data.sw);
+      d.sw.portInfo = function () { return self.portStates(d.id); };
+      d.term = target(d.sw);
+    } else {
+      d.cfg = { ip: '', mask: '', gateway: '' };
+      d.mac = macFor(d.id);
+      d.arp = {};
+      d.shell = new root.PcShell(this, d);
+      d.term = target(d.shell);
+    }
+  };
+
+  // Ports of a switch with whether a cable is plugged in.
+  Network.prototype.portStates = function (devId) {
+    var d = this.get(devId);
+    if (!d) return [];
+    var used = this.usedPorts(devId);
+    return portsOf(d.type).map(function (p) { return { name: p, connected: used.indexOf(p) !== -1 }; });
+  };
+
+  // Forget MAC addresses learned on ports that no longer have a cable.
+  Network.prototype.purgeTables = function () {
+    var self = this;
+    this.devices.forEach(function (d) {
+      if (d.type !== 'switch') return;
+      var used = self.usedPorts(d.id);
+      d.sw.macTable = d.sw.macTable.filter(function (e) { return used.indexOf(e.port) !== -1; });
+    });
+  };
+
+  // Apply a PC's IP settings. Returns an error message, or null on success.
+  Network.prototype.setPcConfig = function (id, cfg) {
+    var d = this.get(id);
+    if (!d || d.type !== 'pc') return 'Device not found.';
+    var others = [];
+    this.devices.forEach(function (o) { if (o.type === 'pc' && o.id !== id && o.cfg.ip) others.push(o.cfg.ip); });
+    var err = root.Netsim.validateConfig(cfg, others);
+    if (err) return err;
+    d.cfg = root.Netsim.normalize(cfg);
+    d.arp = {};
+    return null;
   };
 
   Network.prototype.usedPorts = function (devId) {
@@ -98,11 +155,13 @@
 
   Network.prototype.removeLink = function (id) {
     this.links = this.links.filter(function (l) { return l.id !== id; });
+    this.purgeTables();
   };
 
   Network.prototype.removeDevice = function (id) {
     this.devices = this.devices.filter(function (d) { return d.id !== id; });
     this.links = this.links.filter(function (l) { return l.a.dev !== id && l.b.dev !== id; });
+    this.purgeTables();
   };
 
   // Returns an error message, or null when the rename worked.
@@ -129,6 +188,7 @@
       devices: this.devices.map(function (d) {
         var o = { id: d.id, type: d.type, name: d.name, x: d.x, y: d.y };
         if (d.sw) o.sw = d.sw.toJSON();
+        if (d.type === 'pc') o.cfg = { ip: d.cfg.ip, mask: d.cfg.mask, gateway: d.cfg.gateway };
         return o;
       }),
       links: this.links.map(function (l) {
@@ -154,7 +214,11 @@
         x: isFinite(o.x) ? Number(o.x) : 0,
         y: isFinite(o.y) ? Number(o.y) : 0
       };
-      if (d.type === 'switch') { d.sw = new root.SwitchSim(o.sw); d.term = target(d.sw); }
+      self._equip(d, o);
+      if (d.type === 'pc' && o.cfg) {
+        var others = self.devices.filter(function (x) { return x.type === 'pc' && x.cfg.ip; }).map(function (x) { return x.cfg.ip; });
+        if (root.Netsim.validateConfig(o.cfg, others) === null) d.cfg = root.Netsim.normalize(o.cfg);
+      }
       bump(d.id);
       self.devices.push(d);
     });

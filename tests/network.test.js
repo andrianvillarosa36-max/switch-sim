@@ -1,6 +1,8 @@
 // Run with: node tests/network.test.js
 const assert = require('assert');
 require('../app/src/main/assets/engine.js');
+require('../app/src/main/assets/netsim.js');
+require('../app/src/main/assets/pcshell.js');
 const { Network } = require('../app/src/main/assets/network.js');
 
 let passed = 0;

@@ -1,7 +1,10 @@
 /*
  * A console: scrollback, helper keys (Tab, ?, history) and the input line.
  * One TerminalView can be pointed at any console state with attach(target),
- * where target = { sw: SwitchSim, log: [], hist: [], hi: 0 } (see Network.target).
+ * where target = { sw: shell, log: [], hist: [], hi: 0 } (see Network.target).
+ * The shell is a SwitchSim or a PcShell. Optional shell features:
+ *   status()  -> { text, cls } for the light next to the keys
+ *   takeJob() -> [{ t, delay }] lines to print one at a time (ping replies)
  */
 (function (root) {
   'use strict';
@@ -30,7 +33,7 @@
 
     this.screen = el('div', 'screen');
     this.screen.setAttribute('role', 'log');
-    this.screen.setAttribute('aria-label', 'Switch console');
+    this.screen.setAttribute('aria-label', 'Console');
 
     var keys = el('div', 'keys');
     function key(label, aria) {
@@ -90,13 +93,16 @@
     this.input.value = '';
     this.screen.textContent = '';
     if (!target.log.length) {
-      this._push({ k: 'line', t: 'Simulated switch console. Type ? for help.', cls: 'dim' });
+      this._push({ k: 'line', t: 'Simulated console. Type ? for help.', cls: 'dim' });
     } else {
       for (var i = 0; i < target.log.length; i++) this._draw(target.log[i]);
     }
+    this.input.placeholder = target.busy ? 'Waiting for replies...' : '';
     this.update();
     this._scroll();
   };
+
+  TerminalView.prototype.scrollToEnd = function () { this._scroll(); };
 
   // Print a message line that is not switch output (for example, lab progress).
   TerminalView.prototype.note = function (text, cls) {
@@ -118,7 +124,12 @@
     if (this.input.type !== want) this.input.type = want;
     this.input.setAttribute('autocomplete', secret ? 'new-password' : 'off');
 
-    if (sw.dirty) { this.syst.textContent = 'Unsaved config'; this.syst.className = 'syst warn'; }
+    if (sw.status) {
+      var st = sw.status();
+      this.syst.textContent = st.text;
+      this.syst.className = 'syst ' + st.cls;
+    }
+    else if (sw.dirty) { this.syst.textContent = 'Unsaved config'; this.syst.className = 'syst warn'; }
     else if (sw.startup) { this.syst.textContent = 'Config saved'; this.syst.className = 'syst ok'; }
     else { this.syst.textContent = 'Nothing configured'; this.syst.className = 'syst'; }
   };
@@ -137,30 +148,64 @@
       d.appendChild(el('span', 'p', entry.p));
       d.appendChild(el('span', 'c', entry.c));
     } else {
-      d = el('div', 'line ' + (entry.cls || ''), entry.t === '' ? ' ' : entry.t);
+      d = el('div', 'line ' + (entry.cls || '') + (entry.tab ? ' tab' : ''), entry.t === '' ? ' ' : entry.t);
     }
     this.screen.appendChild(d);
   };
 
-  TerminalView.prototype._printAll = function (lines) {
-    for (var i = 0; i < lines.length; i++) this._push({ k: 'line', t: lines[i], cls: classify(lines[i]) });
+  // tabular: rows of columns (show / arp output) keep their spacing and scroll sideways instead of wrapping.
+  TerminalView.prototype._printAll = function (lines, tabular) {
+    for (var i = 0; i < lines.length; i++) {
+      var entry = { k: 'line', t: lines[i], cls: classify(lines[i]) };
+      if (tabular && /\S {3,}\S/.test(lines[i])) entry.tab = true;
+      this._push(entry);
+    }
   };
+
+  function isTableCommand(text) {
+    var first = text.trim().split(/\s+/)[0].toLowerCase();
+    return !!first && !/\?\s*$/.test(text) && ('show'.indexOf(first) === 0 || first === 'arp');
+  }
 
   TerminalView.prototype._scroll = function () { this.screen.scrollTop = this.screen.scrollHeight; };
 
   TerminalView.prototype._submit = function () {
     var t = this.t;
-    if (!t) return;
+    if (!t || t.busy) return;
     var sw = t.sw, text = this.input.value, secret = sw.secretInput, wasPending = !!sw.pending;
     this._push({ k: 'echo', p: sw.prompt, c: secret ? '' : text });
     if (!wasPending && text.trim()) t.hist.push(text);
     t.hi = t.hist.length;
-    this._printAll(sw.exec(text));
+    this._printAll(sw.exec(text), !wasPending && isTableCommand(text));
+    var job = sw.takeJob ? sw.takeJob() : null;
+    if (job && job.length) this._play(t, job);
     this.input.value = '';
     this.update();
     if (this.opts.onCommand) this.opts.onCommand(t);
     this._scroll();
     this.input.focus();
+  };
+
+  // Print job lines one at a time. Keeps going if the user leaves the console.
+  TerminalView.prototype._play = function (target, job) {
+    var self = this, i = 0;
+    target.busy = true;
+    this.input.placeholder = 'Waiting for replies...';
+    function next() {
+      if (i >= job.length) {
+        target.busy = false;
+        if (self.t === target) { self.input.placeholder = ''; self.update(); }
+        return;
+      }
+      var item = job[i++];
+      setTimeout(function () {
+        var entry = { k: 'line', t: item.t, cls: classify(item.t) };
+        if (self.t === target) { self._push(entry); self._scroll(); }
+        else { target.log.push(entry); if (target.log.length > MAX_LINES) target.log.shift(); }
+        next();
+      }, item.delay);
+    }
+    next();
   };
 
   TerminalView.prototype._tab = function () {

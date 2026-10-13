@@ -13,10 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Test the switch engine and network model
+      - name: Test the switch engine, network model and simulation
         run: |
           node tests/engine.test.js
           node tests/network.test.js
+          node tests/netsim.test.js
 
       - uses: actions/setup-java@v4
         with:

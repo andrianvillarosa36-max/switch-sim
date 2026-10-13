@@ -154,4 +154,36 @@ test('state survives save/load, mode resets', () => {
   assert.ok(b.flags.end);
 });
 
+test('show mac address-table, clear it, and reload empties it', () => {
+  const sw = new SwitchSim();
+  sw.exec('enable');
+  const empty = sw.exec('show mac address-table');
+  assert.ok(empty.includes('Total Mac Addresses for this criterion: 0'));
+  sw.macTable.push({ vlan: 1, mac: '0001.0a0b.0001', port: 'FastEthernet0/1' });
+  const one = sw.exec('sh mac address-table');
+  assert.ok(one.some(l => /^\s+1\s+0001\.0a0b\.0001\s+DYNAMIC\s+Fa0\/1$/.test(l)), one.join('\n'));
+  assert.ok(one.includes('Total Mac Addresses for this criterion: 1'));
+  assert.ok(sw.exec('show mac-address-table').length === one.length, 'older spelling works');
+  sw.exec('clear mac address-table dynamic');
+  assert.strictEqual(sw.macTable.length, 0);
+  sw.macTable.push({ vlan: 1, mac: '0001.0a0b.0001', port: 'FastEthernet0/1' });
+  sw.exec('reload'); sw.exec('');
+  assert.strictEqual(sw.macTable.length, 0, 'volatile');
+});
+
+test('show interfaces status uses the cables the network reports', () => {
+  const sw = new SwitchSim();
+  sw.portInfo = () => [
+    { name: 'FastEthernet0/1', connected: true },
+    { name: 'FastEthernet0/2', connected: false },
+    { name: 'GigabitEthernet0/1', connected: false }
+  ];
+  sw.exec('enable');
+  const out = sw.exec('show int status');
+  assert.ok(out[0].startsWith('Port'));
+  assert.ok(/^Fa0\/1\s+connected\s+1\s+a-full\s+a-100$/.test(out[1]), out[1]);
+  assert.ok(/^Fa0\/2\s+notconnect/.test(out[2]), out[2]);
+  assert.ok(/^Gi0\/1\s+notconnect\s+1\s+auto\s+auto$/.test(out[3]), out[3]);
+});
+
 console.log('\n' + passed + ' passed' + (process.exitCode ? ', some FAILED' : ''));

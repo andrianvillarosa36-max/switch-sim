@@ -1,8 +1,8 @@
 /*
  * The network canvas. Draws a Network (see network.js) as SVG and handles
  * touch: drag a device to move it, drag the background to pan, pinch to zoom,
- * tap to select, Cable mode to connect two devices, double-tap a switch to
- * open its console.
+ * tap to select, Cable mode to connect two devices, double-tap a device to
+ * open it (a switch console, or a PC's settings and command prompt).
  */
 (function (root) {
   'use strict';
@@ -158,7 +158,7 @@
       var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       devs.forEach(function (d) {
         minX = Math.min(minX, d.x - 46); maxX = Math.max(maxX, d.x + 46);
-        minY = Math.min(minY, d.y - 30); maxY = Math.max(maxY, d.y + 44);
+        minY = Math.min(minY, d.y - 30); maxY = Math.max(maxY, d.y + 56);
       });
       var s = clamp(Math.min(1.2, (rect.width - 40) / (maxX - minX), (rect.height - 40) / (maxY - minY)), MIN_S, MAX_S);
       this.view = { x: rect.width / 2 - ((minX + maxX) / 2) * s, y: rect.height / 2 - ((minY + maxY) / 2) * s, s: s, set: true };
@@ -235,10 +235,14 @@
       var selected = ui.sel && ui.sel.kind === 'dev' && ui.sel.id === d.id;
       var from = ui.tool === 'cable' && ui.from === d.id;
       var g = S('g', { 'class': 'dev', 'data-kind': 'dev', 'data-id': d.id, transform: 'translate(' + d.x + ' ' + d.y + ')' }, r.devs);
-      S('rect', { 'class': 'hit', x: -44, y: -24, width: 88, height: 68 }, g);
-      if (selected || from) S('rect', { 'class': 'selring' + (from ? ' from' : ''), x: -42, y: -22, width: 84, height: 62, rx: 8 }, g);
+      var hasIp = d.type === 'pc' && d.cfg && d.cfg.ip;
+      S('rect', { 'class': 'hit', x: -44, y: -24, width: 88, height: 80 }, g);
+      if (selected || from) {
+        S('rect', { 'class': 'selring' + (from ? ' from' : ''), x: -42, y: -22, width: 84, height: hasIp ? 76 : 62, rx: 8 }, g);
+      }
       g.appendChild(icon(d.type));
       S('text', { 'class': 'label', y: 34, 'text-anchor': 'middle' }, g).textContent = d.name;
+      if (hasIp) S('text', { 'class': 'iplabel', y: 47, 'text-anchor': 'middle' }, g).textContent = d.cfg.ip;
     });
   };
 
@@ -304,12 +308,12 @@
     if (d) {
       var n = net.linksOf(d.id).length;
       title(d.name);
-      sub((d.type === 'switch' ? 'Switch' : 'PC') + ', ' + n + (n === 1 ? ' cable' : ' cables'));
-      if (d.type === 'switch') {
-        acts.appendChild(this._btn('Console', 'primary', function () {
-          if (self.h.openConsole) self.h.openConsole(d);
-        }));
-      }
+      sub((d.type === 'switch' ? 'Switch' : d.cfg.ip ? 'PC, ' + d.cfg.ip : 'PC, no IP address') +
+        ', ' + n + (n === 1 ? ' cable' : ' cables'));
+      acts.appendChild(this._btn(d.type === 'switch' ? 'Console' : 'Open', 'primary', function () {
+        self._lastTap = { id: null, t: 0 };
+        if (self.h.openConsole) self.h.openConsole(d);
+      }));
       acts.appendChild(this._btn('Rename', '', function () {
         ui.editing = true; ui.draft = null; ui.msg = ''; ui.confirm = null;
         self.renderBar();
@@ -384,8 +388,9 @@
     ui.sel = hit;
     this.render();
     if (dbl) {
+      this._lastTap = { id: null, t: 0 };
       var d = this.net.get(hit.id);
-      if (d && d.type === 'switch' && this.h.openConsole) this.h.openConsole(d);
+      if (d && this.h.openConsole) this.h.openConsole(d);
     }
   };
 

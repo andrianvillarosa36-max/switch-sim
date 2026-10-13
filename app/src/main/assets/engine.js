@@ -22,6 +22,8 @@
     return a.hostname === b.hostname && a.secret === b.secret && a.password === b.password;
   }
   function pad(s, n) { while (s.length < n) s += ' '; return s; }
+  function padLeft(s, n) { while (s.length < n) s = ' ' + s; return s; }
+  function shortPort(n) { return n.replace('FastEthernet', 'Fa').replace('GigabitEthernet', 'Gi'); }
 
   // Looks like an IOS "type 5" hash. Simulated only, not a real hash.
   function fakeHash(pw) {
@@ -195,6 +197,34 @@
     return [];
   }
 
+  // Column spacing is a little tighter than a real switch so the table fits a phone screen.
+  function cmdShowMac(sw) {
+    var L = [
+      '     Mac Address Table',
+      '------------------------------------',
+      '',
+      'Vlan  Mac Address     Type     Ports',
+      '----  --------------  -------  -----'
+    ];
+    sw.macTable.forEach(function (e) {
+      L.push(padLeft(String(e.vlan), 4) + '  ' + pad(e.mac, 16) + pad('DYNAMIC', 9) + shortPort(e.port));
+    });
+    L.push('Total Mac Addresses for this criterion: ' + sw.macTable.length);
+    return L;
+  }
+
+  function cmdClearMac(sw) { sw.macTable = []; return []; }
+
+  function cmdShowIfStatus(sw) {
+    var L = ['Port   Status      Vlan  Duplex Speed'];
+    (sw.portInfo ? sw.portInfo() : []).forEach(function (p) {
+      var gig = p.name.indexOf('Gigabit') === 0, up = p.connected;
+      L.push(pad(shortPort(p.name), 7) + pad(up ? 'connected' : 'notconnect', 12) + pad('1', 6) +
+        pad(up ? 'a-full' : 'auto', 7) + (up ? (gig ? 'a-1000' : 'a-100') : 'auto'));
+    });
+    return L;
+  }
+
   function askReloadConfirm(sw) {
     sw.pending = {
       prompt: 'Proceed with reload? [confirm]', secret: false,
@@ -202,6 +232,7 @@
         var t = text.trim().toLowerCase();
         if (t === '' || t === 'y' || t === 'yes' || t === 'confirm') {
           s.running = clone(s.startup || defaultConfig());
+          s.macTable = [];
           s.mode = 'user';
           return ['', '*** System restarted (simulated) ***', '', 'Press RETURN to get started.', ''];
         }
@@ -238,6 +269,10 @@
   ];
 
   var PRIV_CMDS = [
+    { p: 'clear', desc: 'Reset functions' },
+    { p: 'clear mac', desc: 'MAC forwarding table' },
+    { p: 'clear mac address-table', desc: 'MAC forwarding table' },
+    { p: 'clear mac address-table dynamic', run: cmdClearMac, desc: 'Clear the dynamic entries' },
     { p: 'configure', run: cmdEnterConfig, desc: 'Enter configuration mode' },
     { p: 'configure terminal', run: cmdEnterConfig, desc: 'Configure from the terminal' },
     { p: 'copy', desc: 'Copy from one file to another' },
@@ -249,6 +284,11 @@
     { p: 'exit', run: LOGOUT, desc: 'Exit from the EXEC' },
     { p: 'reload', run: cmdReload, desc: 'Halt and perform a cold restart' },
     { p: 'show', desc: 'Show running system information' },
+    { p: 'show interfaces', desc: 'Interface status and configuration' },
+    { p: 'show interfaces status', run: cmdShowIfStatus, desc: 'Display interface status' },
+    { p: 'show mac', desc: 'MAC configuration' },
+    { p: 'show mac address-table', run: cmdShowMac, desc: 'MAC forwarding table' },
+    { p: 'show mac-address-table', run: cmdShowMac, desc: 'MAC forwarding table' },
     { p: 'show running-config', run: cmdShowRun, desc: 'Current operating configuration' },
     { p: 'show startup-config', run: cmdShowStart, desc: 'Contents of the startup configuration' },
     { p: 'write', run: cmdWrite, desc: 'Write running configuration to memory' },
@@ -283,6 +323,8 @@
     this.flags = { priv: false, config: false, end: false };
     this.mode = 'user';       // 'user' | 'priv' | 'config'
     this.pending = null;      // a question the switch is waiting on (password, [confirm], ...)
+    this.macTable = [];       // learned addresses: [{ vlan, mac, port }] (cleared on reload)
+    this.portInfo = null;     // set by the network: () => [{ name, connected }]
     if (saved) this.load(saved);
   }
 

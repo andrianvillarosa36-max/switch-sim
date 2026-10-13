@@ -47,7 +47,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 
 /* ---------- network canvas ---------- */
 
-.net, .consoleview, .lab { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.net, .consoleview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .toolbar { display: flex; gap: 6px; padding: 6px 10px 8px; overflow-x: auto; scrollbar-width: none; }
 .toolbar > * { flex: none; }
@@ -85,6 +85,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 .portlabel, .label { paint-order: stroke; stroke: var(--screen); stroke-width: 4px; stroke-linejoin: round; }
 .portlabel { fill: var(--dim); font: 10px var(--mono); }
 .label { fill: var(--text); font: 600 12px var(--ui); }
+.iplabel { fill: var(--cable); font: 10px var(--mono); paint-order: stroke; stroke: var(--screen); stroke-width: 4px; stroke-linejoin: round; }
 .dev .hit { fill: transparent; pointer-events: all; }
 .selring { fill: rgba(143, 211, 240, 0.07); stroke: var(--cable); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .selring.from { fill: rgba(245, 168, 61, 0.1); stroke: var(--warn); }
@@ -107,48 +108,20 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 /* ---------- device console screen ---------- */
 
 .consolebar { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--panel); border-top: 1px solid var(--line); }
-.ctitle { font-weight: 600; }
+.ctitle { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.consolebar .tabs button { padding: 6px 10px; font-size: 13px; }
 .consolehost { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-/* ---------- lesson ---------- */
-
-.panel { background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.taskbar { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; text-align: left; background: none; border: 0; }
-.tasktext { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.count { font-size: 12px; color: var(--dim); }
-.task { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chev { flex: none; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid var(--dim); border-bottom: 2px solid var(--dim); transform: rotate(45deg); transition: transform 0.18s; }
-.taskbar[aria-expanded="true"] .chev { transform: rotate(225deg); }
-
-.leds { display: flex; flex: none; gap: 7px; }
-.led { width: 12px; height: 12px; border-radius: 50%; background: #22394a; box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6); }
-.led.on { background: var(--ok); box-shadow: 0 0 8px 1px rgba(70, 211, 144, 0.55); }
-.led.now { background: var(--warn); box-shadow: 0 0 8px 1px rgba(245, 168, 61, 0.55); animation: blink 1.6s ease-in-out infinite; }
-@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .led.now { animation: none; } .chev { transition: none; } }
-
-.steps { max-height: 46vh; overflow-y: auto; padding: 0 12px 12px; }
-.mission { margin: 0 0 8px; font-size: 13px; color: var(--dim); }
-.steps ol { margin: 0 0 8px; padding: 0; list-style: none; }
-.steps li { position: relative; padding: 6px 0 6px 28px; font-size: 14px; color: var(--dim); }
-.steps li::before { content: ""; position: absolute; left: 3px; top: 11px; width: 10px; height: 10px; border-radius: 50%; background: #22394a; }
-.steps li.done { color: var(--text); }
-.steps li.done::before { background: var(--ok); box-shadow: 0 0 6px rgba(70, 211, 144, 0.5); }
-.steps li.cur { color: var(--text); font-weight: 600; }
-.steps li.cur::before { background: var(--warn); box-shadow: 0 0 6px rgba(245, 168, 61, 0.5); }
-.steprow { display: flex; gap: 8px; }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.hint { margin: 8px 0 0; padding: 8px 10px; font-size: 14px; background: var(--screen); border-left: 3px solid var(--cable); border-radius: 0 6px 6px 0; }
-
-/* ---------- console (shared by lesson and device consoles) ---------- */
+/* ---------- console (switch consoles and PC command prompts) ---------- */
 
 .screen {
-  flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px;
+  flex: 1; min-height: 0; overflow-x: auto; overflow-y: auto; padding: 10px 12px;
   background: var(--screen);
   font-family: var(--mono); font-size: 14px; line-height: 1.5;
   -webkit-overflow-scrolling: touch;
 }
 .line { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.line.tab { white-space: pre; overflow-wrap: normal; }
 .line.dim { color: var(--dim); }
 .line.err { color: var(--err); }
 .line.ok { color: var(--ok); }
@@ -179,20 +152,18 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 }
 .send { min-height: 42px; padding: 10px 16px; background: var(--cable); color: #07202c; border: 0; border-radius: 8px; font-weight: 600; }
 
-/* ---------- quiz ---------- */
+/* ---------- PC settings ---------- */
 
-.view { flex: 1; min-height: 0; overflow-y: auto; padding: 6px 16px 32px; }
-.view > * { max-width: 560px; margin-left: auto; margin-right: auto; }
-.view h2 { margin-top: 8px; margin-bottom: 4px; font-size: 20px; font-weight: 650; }
-.lede { margin-top: 0; margin-bottom: 12px; color: var(--dim); }
-.q { padding: 14px 0 6px; border-top: 1px solid var(--line); }
-.qtext { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
-.opt { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 10px 4px; }
-.opt input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--cable); }
-.opt.mono span { font-family: var(--mono); font-size: 14px; }
-.result { margin: 6px 0 8px; padding: 8px 10px; font-size: 14px; background: var(--panel); border-left: 3px solid var(--dim); border-radius: 0 6px 6px 0; }
-.result.ok { border-color: var(--ok); }
-.result.bad { border-color: var(--err); }
-.result.warn { border-color: var(--warn); }
-.quizbar { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
-.score { font-weight: 600; }
+.pcset { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 24px; background: var(--chassis); }
+.pcset > * { max-width: 460px; margin-left: auto; margin-right: auto; }
+.field { display: block; margin-bottom: 14px; }
+.field span { display: block; margin-bottom: 4px; font-size: 13px; color: var(--dim); }
+.field input {
+  width: 100%; padding: 12px; background: var(--screen); color: #fff;
+  border: 1px solid var(--line); border-radius: 8px;
+  font-family: var(--mono); font-size: 16px;
+}
+.pcmsg { min-height: 1.4em; margin: 0 auto 12px; font-size: 14px; color: var(--dim); }
+.pcmsg.ok { color: var(--ok); }
+.pcmsg.bad { color: var(--err); }
+.pcact { display: flex; gap: 10px; }

@@ -11,15 +11,10 @@
   <div class="app">
     <header class="top">
       <h1 class="brand">Switch Sim</h1>
-      <div class="tabs" role="tablist" aria-label="Sections">
-        <button id="tab-net" type="button" role="tab" aria-selected="true" aria-controls="view-net">Network</button>
-        <button id="tab-lab" type="button" role="tab" aria-selected="false" aria-controls="view-lab">Lesson</button>
-        <button id="tab-quiz" type="button" role="tab" aria-selected="false" aria-controls="view-quiz">Quiz</button>
-      </div>
     </header>
 
     <!-- Network: topology canvas -->
-    <section id="view-net" class="net" role="tabpanel" aria-labelledby="tab-net">
+    <section id="view-net" class="net">
       <div id="toolbar" class="toolbar" role="toolbar" aria-label="Network tools">
         <button id="add-switch" class="tool" type="button"><span class="ico" data-icon="switch"></span>Switch</button>
         <button id="add-pc" class="tool" type="button"><span class="ico" data-icon="pc"></span>PC</button>
@@ -40,54 +35,42 @@
       <div id="netbar" class="netbar"></div>
     </section>
 
-    <!-- Network: one device's console -->
+    <!-- One device: switch console, or PC settings and command prompt -->
     <section id="view-console" class="consoleview" hidden>
       <div class="consolebar">
         <button id="console-back" class="ghost" type="button">Back</button>
         <span id="console-title" class="ctitle"></span>
-      </div>
-      <div id="console-host" class="consolehost"></div>
-    </section>
-
-    <!-- Lesson: guided lab on a single switch -->
-    <section id="view-lab" class="lab" role="tabpanel" aria-labelledby="tab-lab" hidden>
-      <div class="panel">
-        <button id="taskbar" class="taskbar" type="button" aria-expanded="false" aria-controls="steps">
-          <span class="leds" id="leds" aria-hidden="true"></span>
-          <span class="tasktext">
-            <span class="count" id="count"></span>
-            <span class="task" id="task"></span>
-          </span>
-          <span class="chev" aria-hidden="true"></span>
-        </button>
-        <div id="steps" class="steps" hidden>
-          <p class="mission" id="mission"></p>
-          <ol id="steplist"></ol>
-          <div class="steprow">
-            <button id="hintbtn" class="ghost" type="button">Show hint</button>
-            <button id="lab-reset" class="ghost" type="button">Reset lab</button>
-          </div>
-          <p class="hint" id="hint" hidden></p>
+        <div id="pc-tabs" class="tabs" role="tablist" aria-label="PC screens" hidden>
+          <button id="pc-tab-settings" type="button" role="tab" aria-selected="true">Settings</button>
+          <button id="pc-tab-cmd" type="button" role="tab" aria-selected="false">Prompt</button>
         </div>
       </div>
-      <div id="lab-host" class="consolehost"></div>
-    </section>
 
-    <!-- Quiz -->
-    <section id="view-quiz" class="view" role="tabpanel" aria-labelledby="tab-quiz" hidden>
-      <h2 id="quiz-title">Quiz</h2>
-      <p class="lede">Pick one answer for each question, then check.</p>
-      <div id="quiz-list"></div>
-      <div class="quizbar">
-        <button id="check" class="send" type="button">Check answers</button>
-        <span id="score" class="score" aria-live="polite"></span>
-      </div>
+      <form id="pc-settings" class="pcset" autocomplete="off" hidden>
+        <label class="field"><span>IP address</span>
+          <input id="pc-ip" type="text" inputmode="decimal" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="192.168.1.10">
+        </label>
+        <label class="field"><span>Subnet mask</span>
+          <input id="pc-mask" type="text" inputmode="decimal" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="default for the address">
+        </label>
+        <label class="field"><span>Default gateway</span>
+          <input id="pc-gw" type="text" inputmode="decimal" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="optional">
+        </label>
+        <p id="pc-msg" class="pcmsg" aria-live="polite"></p>
+        <div class="pcact">
+          <button type="submit" class="send">Save</button>
+          <button id="pc-go" class="ghost" type="button">Open prompt</button>
+        </div>
+      </form>
+
+      <div id="console-host" class="consolehost"></div>
     </section>
   </div>
 
   <script src="engine.js"></script>
+  <script src="netsim.js"></script>
+  <script src="pcshell.js"></script>
   <script src="network.js"></script>
-  <script src="lesson1.js"></script>
   <script src="terminal.js"></script>
   <script src="topology.js"></script>
   <script src="app.js"></script>
