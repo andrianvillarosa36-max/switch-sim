@@ -3,6 +3,7 @@ const assert = require('assert');
 require('../app/src/main/assets/engine.js');
 require('../app/src/main/assets/netsim.js');
 require('../app/src/main/assets/pcshell.js');
+require('../app/src/main/assets/router.js');
 const { Network } = require('../app/src/main/assets/network.js');
 
 let passed = 0;
@@ -104,7 +105,7 @@ test('load drops broken data instead of crashing', () => {
     devices: [
       { id: 'd1', type: 'switch', name: 'A', x: 0, y: 0 },
       { id: 'd1', type: 'switch', name: 'dup', x: 0, y: 0 },
-      { id: 'd2', type: 'router', name: 'bad type', x: 0, y: 0 },
+      { id: 'd2', type: 'toaster', name: 'bad type', x: 0, y: 0 },
       { id: 'd3', type: 'pc', name: 'B', x: 'nope', y: 5 },
       null
     ],

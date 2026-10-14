@@ -41,6 +41,9 @@
       for (var i = 0; i < 8; i++) S('rect', { 'class': 'ic-port', x: -30 + i * 8, y: 1, width: 6, height: 6, rx: 1 }, g);
       S('circle', { 'class': 'ic-led', cx: -29, cy: -8, r: 2 }, g);
       S('circle', { 'class': 'ic-led warm', cx: -22, cy: -8, r: 2 }, g);
+    } else if (type === 'router') {
+      S('circle', { 'class': 'ic-body', cx: 0, cy: 0, r: 17 }, g);
+      S('path', { 'class': 'ic-arrow', d: 'M-10,0 H10 M6,-4 L10,0 L6,4 M-6,-4 L-10,0 L-6,4 M0,-10 V10 M-4,-6 L0,-10 L4,-6 M-4,6 L0,10 L4,6' }, g);
     } else {
       S('rect', { 'class': 'ic-body', x: -18, y: -18, width: 36, height: 26, rx: 3 }, g);
       S('rect', { 'class': 'ic-screen', x: -14, y: -14, width: 28, height: 18, rx: 1 }, g);
@@ -64,7 +67,7 @@
 
   /* ---------- the controller ---------- */
 
-  // refs: { svg, world, links, devs, bar, toolbar, cable, addSwitch, addPc, clear, fit }
+  // refs: { svg, world, links, devs, bar, toolbar, cable, addSwitch, addPc, addRouter, clear, fit }
   // hooks: { onChange(), openConsole(device) }
   function Topology(refs, hooks) {
     this.r = refs;
@@ -311,9 +314,9 @@
     if (d) {
       var n = net.linksOf(d.id).length;
       title(d.name);
-      sub((d.type === 'switch' ? 'Switch' : d.cfg.ip ? 'PC, ' + d.cfg.ip : 'PC, no IP address') +
+      sub((d.type === 'switch' ? 'Switch' : d.type === 'router' ? 'Router' : d.cfg.ip ? 'PC, ' + d.cfg.ip : 'PC, no IP address') +
         ', ' + n + (n === 1 ? ' cable' : ' cables'));
-      acts.appendChild(this._btn(d.type === 'switch' ? 'Console' : 'Open', 'primary', function () {
+      acts.appendChild(this._btn(d.type === 'pc' ? 'Open' : 'Console', 'primary', function () {
         self._lastTap = { id: null, t: 0 };
         if (self.h.openConsole) self.h.openConsole(d);
       }));
@@ -502,6 +505,7 @@
 
     r.addSwitch.addEventListener('click', function () { self.addDevice('switch'); });
     r.addPc.addEventListener('click', function () { self.addDevice('pc'); });
+    r.addRouter.addEventListener('click', function () { self.addDevice('router'); });
 
     r.cable.addEventListener('click', function () {
       var ui = self.ui;

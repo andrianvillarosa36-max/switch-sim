@@ -1,8 +1,8 @@
 # Switch Sim
 
-A phone app for practicing networking. Build a small network, cable it, give PCs IP
-addresses, ping between them through switches, and configure the switches from their
-consoles (Cisco IOS-style commands: modes, abbreviations, `?` help, Tab completion).
+A phone app for practicing networking. Build a small network of PCs, switches and routers,
+cable it, give PCs IP addresses, ping between them, and configure the switches and routers
+from their consoles (Cisco IOS-style commands: modes, abbreviations, `?` help, Tab completion).
 Works offline.
 
 ## Using it
@@ -27,6 +27,16 @@ Works offline.
     `switchport trunk allowed vlan 10,20 | add | remove | all | none`, and the `no` forms.
   - Checking: `show interfaces status`, `show interfaces trunk`, `show mac address-table`,
     `clear mac address-table dynamic`.
+- **Routers:** add one with **Router** (three Gigabit ports) and tap **Console**. Interfaces start
+  shut down, like the real thing.
+  - Interfaces: `interface g0/0`, `ip address 192.168.1.1 255.255.255.0`, `no shutdown`,
+    `description`, `shutdown`.
+  - Router-on-a-stick: `interface g0/0.10`, `encapsulation dot1q 10`, `ip address ...`
+    (the address is refused until the encapsulation is set, as on a real router).
+  - Routing: `ip route <network> <mask> <next-hop>` (and `no ip route`), including default routes
+    (`ip route 0.0.0.0 0.0.0.0 10.0.0.2`).
+  - Checking: `show ip route`, `show ip interface brief`, `show ip arp`, `clear arp-cache`,
+    `ping <ip>`, `show running-config`, `copy running-config startup-config`, `reload`.
 - **On the canvas:** trunk links are drawn in lavender, shut-down links are red and dashed,
   and an access port in a non-default VLAN shows it (`Fa0/1 v10`).
 
@@ -36,6 +46,18 @@ Ping fails across the plain cable, because VLAN 10 does not leave the switch. On
 uplink to `switchport mode trunk` and the ping works (SW2's default dynamic auto port negotiates
 a trunk). Then try `switchport trunk allowed vlan 20` on the trunk, or a different native VLAN
 on each side, and see what breaks.
+
+Routing labs:
+1. *One router:* PC1 `192.168.1.10` and PC2 `192.168.2.10`, each cabled to a router. Give the router
+   `192.168.1.1/24` on `g0/0` and `192.168.2.1/24` on `g0/1` (`no shutdown` on both), set each PC's
+   default gateway to its router address, then ping across. The reply TTL is 127.
+2. *Two routers:* PC1 - R1 - R2 - PC2 with `10.0.0.0/30` between the routers. Ping fails with
+   "Destination host unreachable" until R1 has a route to PC2's network. Add only that route and
+   the ping times out instead, because R2 has no route back. Add `ip route 192.168.1.0 255.255.255.0
+   10.0.0.1` on R2 and it works (TTL 126).
+3. *Inter-VLAN routing:* the VLAN lab above, plus a router cabled to the switch's trunk port, with
+   subinterfaces `g0/0.10` and `g0/0.20` using `encapsulation dot1q`. Do not forget
+   `no shutdown` on `g0/0` itself.
 
 Basic lab: add two PCs and a switch, cable PC1 to the switch and PC2 to the switch, give them
 `192.168.1.10` and `192.168.1.20`, then `ping 192.168.1.20` from PC1. The first reply is slower
@@ -58,15 +80,22 @@ Run `clear mac address-table dynamic`, ping again, and watch it relearn.
 - Shutting a port brings the link down at both ends and flushes its MAC entries.
 - The VLAN database is kept apart from the config, like vlan.dat: it survives `reload` and is not
   affected by `copy running-config startup-config`.
-- Not yet: routers, inter-VLAN routing, switch management IPs (`interface vlan 1`), spanning tree,
+- Routers: each is a Layer 3 hop. They answer ARP for their own addresses, pick the longest
+  matching prefix (connected beats static on a tie), decrement TTL, and ARP for the next hop.
+  A static route is only used when its next hop is on a connected network. A router with no route
+  sends back "Destination host unreachable". A router ping loses its first echo while ARP resolves
+  the next hop (`.!!!!`), as real routers do. A routing loop ends quietly after a bounded number of
+  hops rather than counting down TTL.
+- Not yet: RIP/OSPF, DHCP, ACLs and NAT, switch management IPs (`interface vlan 1`), spanning tree,
   VTP, `show interfaces <port> switchport`.
 
 ## How it is built
 
 - `app/src/main/assets/` is the actual app, plain HTML/JS:
   - `engine.js` the simulated IOS switch (one instance per switch): modes, VLAN database, ports
-  - `netsim.js` IP rules, per-VLAN switching (access, trunk, negotiation), ARP, ping
+  - `netsim.js` IP rules, per-VLAN switching (access, trunk, negotiation), ARP, routing, ping
   - `pcshell.js` the PC command prompt
+  - `router.js` the simulated IOS router
   - `network.js` devices, ports, cables, PC settings (no drawing code)
   - `topology.js` the canvas: drawing, touch gestures, cable mode, selection bar
   - `terminal.js` the console component shared by switches and PCs
@@ -84,7 +113,7 @@ cp -r ~/switch-sim-new/switch-sim/. ~/switch-sim/
 rm -f ~/switch-sim/app/src/main/assets/lesson1.js      # the lesson was removed
 cd ~/switch-sim
 git add -A
-git commit -m "Stage 3: VLANs and trunks"
+git commit -m "Stage 4: routers, plus app icon"
 git push
 ```
 
@@ -97,7 +126,7 @@ topology and switch configurations.
 ```sh
 cd app/src/main/assets
 python -m http.server 8080                 # open http://localhost:8080 in the phone browser
-cd ../../../.. && for t in engine network netsim vlan; do node tests/$t.test.js; done
+cd ../../../.. && for t in engine network netsim vlan router; do node tests/$t.test.js; done
 ```
 
 ## Roadmap
@@ -105,8 +134,14 @@ cd ../../../.. && for t in engine network netsim vlan; do node tests/$t.test.js;
 1. Topology canvas (done)
 2. PCs with IP settings and ping through switches with MAC learning (done)
 3. VLANs and trunks that actually affect traffic (done)
-4. Routers, static routes, inter-VLAN routing
+4. Routers, static routes, inter-VLAN routing (done)
 5. Packet animation, saved topologies, labs that check the whole network
+
+## App icon
+
+The launcher icon (a switch with a lavender trunk cable) is an adaptive icon for Android 8+ with
+PNG fallbacks for older versions. `icon-512.png` in the project root is a 512px copy you can use
+as the GitHub repository picture.
 
 ## Notes
 

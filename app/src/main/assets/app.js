@@ -110,7 +110,7 @@
     topo = new window.Topology({
       svg: $('net'), world: $('world'), links: $('layer-links'), devs: $('layer-devs'),
       bar: $('netbar'), toolbar: $('toolbar'),
-      cable: $('tool-cable'), addSwitch: $('add-switch'), addPc: $('add-pc'),
+      cable: $('tool-cable'), addSwitch: $('add-switch'), addPc: $('add-pc'), addRouter: $('add-router'),
       clear: $('net-clear'), fit: $('net-fit')
     }, { onChange: saveAll, openConsole: openDevice });
     if (saved && saved.net) topo.load(saved.net);

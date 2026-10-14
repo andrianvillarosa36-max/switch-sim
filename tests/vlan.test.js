@@ -3,6 +3,7 @@ const assert = require('assert');
 require('../app/src/main/assets/engine.js');
 const N = require('../app/src/main/assets/netsim.js');
 require('../app/src/main/assets/pcshell.js');
+require('../app/src/main/assets/router.js');
 const { Network } = require('../app/src/main/assets/network.js');
 
 let passed = 0;

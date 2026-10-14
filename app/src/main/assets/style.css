@@ -52,13 +52,14 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 
 .toolbar { display: flex; gap: 6px; padding: 6px 10px 8px; overflow-x: auto; scrollbar-width: none; }
 .toolbar > * { flex: none; }
-.tool { display: flex; align-items: center; gap: 4px; min-height: 40px; padding: 6px 9px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; font-size: 14px; }
+.tool { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 62px; min-height: 48px; padding: 4px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; font-size: 12px; }
 .tool[aria-pressed="true"] { background: var(--cable); border-color: var(--cable); color: #07202c; font-weight: 600; }
 .ico { display: inline-flex; }
 .ico svg { width: 28px; height: 15px; }
 .ico .ic-body { stroke-width: 3; }
 .ico .ic-port { stroke-width: 1.5; }
 .ico .cable { stroke-width: 6; }
+.ico .ic-arrow { stroke-width: 4; }
 .ico .portdot { stroke-width: 3; }
 .tool[aria-pressed="true"] .ico .cable { stroke: #07202c; }
 
@@ -78,6 +79,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 .ic-led.warm { fill: var(--warn); }
 .ic-screen { fill: var(--screen); }
 .ic-stand { fill: #3d6178; }
+.ic-arrow { fill: none; stroke: var(--cable); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 .cable { stroke: var(--cable); stroke-width: 2.5; stroke-linecap: round; fill: none; }
 .cable.trunk { stroke: var(--trunk); stroke-width: 4; }

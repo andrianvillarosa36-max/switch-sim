@@ -3,8 +3,9 @@
  * No drawing code lives here, so it runs in Node tests too. Later stages
  * (PC addressing, ping, VLANs) extend this model.
  *
- * Device: { id, type: 'switch' | 'pc', name, x, y, ... }
+ * Device: { id, type: 'switch' | 'pc' | 'router', name, x, y, ... }
  *   switch: sw (SwitchSim), term (console state)
+ *   router: rt (RouterSim), mac, arp (cache, not saved), term
  *   pc:     cfg { ip, mask, gateway }, mac, arp (cache, not saved),
  *           shell (command prompt), term (console state)
  *   term - { sw, log, hist, hi }: the thing a console is attached to
@@ -15,8 +16,9 @@
 
   var SWITCH_PORTS = root.SwitchSim.PORTS.slice();   // the switch model defines its own ports
   var PC_PORTS = ['FastEthernet0'];
-  var TYPES = { 'switch': SWITCH_PORTS, 'pc': PC_PORTS };
-  var PREFIX = { 'switch': 'SW', 'pc': 'PC' };
+  var ROUTER_PORTS = root.RouterSim.PORTS.slice();
+  var TYPES = { 'switch': SWITCH_PORTS, 'pc': PC_PORTS, 'router': ROUTER_PORTS };
+  var PREFIX = { 'switch': 'SW', 'pc': 'PC', 'router': 'R' };
 
   function portsOf(type) { return TYPES[type] || []; }
   function shortPort(name) { return name.replace('FastEthernet', 'Fa').replace('GigabitEthernet', 'Gi'); }
@@ -80,6 +82,16 @@
       d.sw.portInfo = function () { return self.portStates(d.id); };
       d.sw.portsChanged = function () { self.purgeTables(); };
       d.term = target(d.sw);
+    } else if (d.type === 'router') {
+      d.mac = macFor(d.id);
+      d.arp = {};
+      d.rt = new root.RouterSim(data && data.rt);
+      d.rt.ifaces = function () { return root.Netsim.routerIfaces(self, d); };
+      d.rt.arp = function () { return d.arp; };
+      d.rt.clearArp = function () { d.arp = {}; };
+      d.rt.ping = function (ip) { return root.Netsim.pingOnce(self, d, ip); };
+      d.rt.portsChanged = function () { self.purgeTables(); };
+      d.term = target(d.rt);
     } else {
       d.cfg = { ip: '', mask: '', gateway: '' };
       d.mac = macFor(d.id);
@@ -198,6 +210,7 @@
       devices: this.devices.map(function (d) {
         var o = { id: d.id, type: d.type, name: d.name, x: d.x, y: d.y };
         if (d.sw) o.sw = d.sw.toJSON();
+        if (d.rt) o.rt = d.rt.toJSON();
         if (d.type === 'pc') o.cfg = { ip: d.cfg.ip, mask: d.cfg.mask, gateway: d.cfg.gateway };
         return o;
       }),

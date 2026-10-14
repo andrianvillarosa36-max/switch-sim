@@ -726,6 +726,8 @@
   }
 
   SwitchSim.PORTS = PORTS;
+  // The command-line machinery, shared with the router (router.js).
+  SwitchSim.cli = { buildTrie: buildTrie, tokenize: tokenize, walk: walk, pad: pad, padLeft: padLeft, stable: stable, fakeHash: fakeHash, shortPort: shortPort };
   SwitchSim.allowedMarks = allowedMarks;
 
   function loadConfig(s) {
