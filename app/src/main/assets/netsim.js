@@ -99,49 +99,103 @@
 
   function otherEnd(link, devId) { return link.a.dev === devId ? link.b : link.a; }
 
-  function findEntry(table, mac) {
-    for (var i = 0; i < table.length; i++) if (table[i].mac === mac) return table[i];
+  function endShut(net, end) {
+    var d = net.get(end.dev);
+    return !!(d && d.type === 'switch' && d.sw.portCfg(end.port).shutdown);
+  }
+
+  // A cable carries a link only when neither end is administratively shut down.
+  function linkUp(net, link) { return !!link && !endShut(net, link.a) && !endShut(net, link.b); }
+
+  // Operational mode of a switch port: 'access' or 'trunk'. Dynamic modes
+  // negotiate with a switch neighbour (like DTP): a dynamic port trunks when
+  // the other end is a trunk, or dynamic desirable / auto toward it.
+  function operMode(net, dev, port) {
+    var mode = dev.sw.portCfg(port).mode;
+    if (mode === 'trunk' || mode === 'access') return mode;
+    var link = linkAt(net, dev.id, port);
+    if (!link || !linkUp(net, link)) return 'access';
+    var peer = otherEnd(link, dev.id), pd = net.get(peer.dev);
+    if (!pd || pd.type !== 'switch') return 'access';
+    var pm = pd.sw.portCfg(peer.port).mode;
+    if (pm === 'trunk') return 'trunk';
+    if (mode === 'desirable' && (pm === 'desirable' || pm === 'auto')) return 'trunk';
+    if (mode === 'auto' && pm === 'desirable') return 'trunk';
+    return 'access';
+  }
+
+  function findEntry(table, vlan, mac) {
+    for (var i = 0; i < table.length; i++) if (table[i].mac === mac && table[i].vlan === vlan) return table[i];
     return null;
   }
 
-  // A switch learns which port a source address lives behind.
-  function learn(sw, mac, port) {
+  // A switch learns which port a source address lives behind, per VLAN.
+  function learn(sw, vlan, mac, port) {
     if (mac === BCAST) return;
-    var e = findEntry(sw.macTable, mac);
-    if (e) e.port = port; else sw.macTable.push({ vlan: 1, mac: mac, port: port });
+    var e = findEntry(sw.macTable, vlan, mac);
+    if (e) e.port = port; else sw.macTable.push({ vlan: vlan, mac: mac, port: port });
+  }
+
+  // The VLAN a frame belongs to when it arrives, or null when it is dropped.
+  function ingressVlan(net, dev, port, tagged, vid) {
+    var cfg = dev.sw.portCfg(port);
+    if (cfg.shutdown) return null;
+    if (operMode(net, dev, port) === 'access') return tagged ? null : cfg.accessVlan;
+    if (!tagged) return cfg.native;
+    return dev.sw.vlanExists(vid) && sw_allows(cfg, vid) ? vid : null;
+  }
+
+  function sw_allows(cfg, vid) {
+    if (cfg.allowed === 'all') return true;
+    var m = root.SwitchSim.allowedMarks(cfg.allowed);
+    return !!(m && m[vid]);
+  }
+
+  // Can this port send frames of this VLAN?
+  function canSend(net, dev, port, vlan) {
+    var link = linkAt(net, dev.id, port);
+    if (!link || !linkUp(net, link)) return false;
+    var cfg = dev.sw.portCfg(port);
+    if (operMode(net, dev, port) === 'access') return cfg.accessVlan === vlan;
+    return sw_allows(cfg, vlan);
   }
 
   // Which ports a switch sends a frame out of.
-  function egress(net, dev, dst, ingress) {
-    var connected = net.usedPorts(dev.id);
+  function egress(net, dev, vlan, dst, ingress) {
+    var cand = net.usedPorts(dev.id).filter(function (p) { return canSend(net, dev, p, vlan); });
     if (dst !== BCAST) {
-      var e = findEntry(dev.sw.macTable, dst);
-      if (e) return (e.port !== ingress && connected.indexOf(e.port) !== -1) ? [e.port] : [];
+      var e = findEntry(dev.sw.macTable, vlan, dst);
+      if (e) return (e.port !== ingress && cand.indexOf(e.port) !== -1) ? [e.port] : [];
     }
-    return connected.filter(function (p) { return p !== ingress; });   // broadcast or unknown unicast: flood
+    return cand.filter(function (p) { return p !== ingress; });   // broadcast or unknown unicast: flood the VLAN
   }
 
   // Put a frame on the cable at (srcDev, srcPort). Returns the PCs it reaches.
-  // Each switch handles a given frame once, so loops cannot storm (there is no
-  // spanning tree yet).
+  // Each switch handles a given frame once per VLAN, so loops cannot storm
+  // (there is no spanning tree yet).
   function transmit(net, srcDev, srcPort, frame) {
     var first = linkAt(net, srcDev.id, srcPort);
-    if (!first) return [];
+    if (!first || !linkUp(net, first)) return [];
     var out = [], seen = {}, steps = 0;
-    var queue = [{ peer: otherEnd(first, srcDev.id), hops: 0 }];
+    var queue = [{ peer: otherEnd(first, srcDev.id), hops: 0, tagged: false, vid: 0 }];
     while (queue.length && steps++ < 500) {
       var it = queue.shift(), d = net.get(it.peer.dev);
       if (!d) continue;
       if (d.type === 'pc') {
-        if (d.id !== srcDev.id) out.push({ dev: d, hops: it.hops });
+        if (!it.tagged && d.id !== srcDev.id) out.push({ dev: d, hops: it.hops });   // PCs ignore tagged frames
         continue;
       }
-      if (seen[d.id]) continue;
-      seen[d.id] = true;
-      learn(d.sw, frame.src, it.peer.port);
-      egress(net, d, frame.dst, it.peer.port).forEach(function (p) {
+      var vlan = ingressVlan(net, d, it.peer.port, it.tagged, it.vid);
+      if (vlan === null || !d.sw.vlanExists(vlan)) continue;
+      var key = d.id + ':' + vlan;
+      if (seen[key]) continue;
+      seen[key] = true;
+      learn(d.sw, vlan, frame.src, it.peer.port);
+      egress(net, d, vlan, frame.dst, it.peer.port).forEach(function (p) {
         var l = linkAt(net, d.id, p);
-        if (l) queue.push({ peer: otherEnd(l, d.id), hops: it.hops + 1 });
+        if (!l) return;
+        var tagged = operMode(net, d, p) === 'trunk' && vlan !== d.sw.portCfg(p).native;
+        queue.push({ peer: otherEnd(l, d.id), hops: it.hops + 1, tagged: tagged, vid: vlan });
       });
     }
     return out;
@@ -203,7 +257,7 @@
     BCAST: BCAST, PC_PORT: PC_PORT,
     parseIp: parseIp, ipStr: ipStr, maskBits: maskBits, sameSubnet: sameSubnet,
     classfulMask: classfulMask, normalize: normalize, validateConfig: validateConfig,
-    pingOnce: pingOnce
+    pingOnce: pingOnce, linkUp: linkUp, operMode: operMode, linkAt: linkAt
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.Netsim;
 })(typeof window !== 'undefined' ? window : globalThis);

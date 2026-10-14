@@ -13,12 +13,7 @@
 (function (root) {
   'use strict';
 
-  var SWITCH_PORTS = (function () {
-    var list = [], i;
-    for (i = 1; i <= 24; i++) list.push('FastEthernet0/' + i);
-    list.push('GigabitEthernet0/1', 'GigabitEthernet0/2');
-    return list;
-  })();
+  var SWITCH_PORTS = root.SwitchSim.PORTS.slice();   // the switch model defines its own ports
   var PC_PORTS = ['FastEthernet0'];
   var TYPES = { 'switch': SWITCH_PORTS, 'pc': PC_PORTS };
   var PREFIX = { 'switch': 'SW', 'pc': 'PC' };
@@ -83,6 +78,7 @@
     if (d.type === 'switch') {
       d.sw = new root.SwitchSim(data && data.sw);
       d.sw.portInfo = function () { return self.portStates(d.id); };
+      d.sw.portsChanged = function () { self.purgeTables(); };
       d.term = target(d.sw);
     } else {
       d.cfg = { ip: '', mask: '', gateway: '' };
@@ -93,22 +89,36 @@
     }
   };
 
-  // Ports of a switch with whether a cable is plugged in.
+  // Ports of a switch: cabled (a cable is plugged in), up (the link works: no
+  // end is shut down) and oper (operational mode, 'access' or 'trunk').
   Network.prototype.portStates = function (devId) {
-    var d = this.get(devId);
-    if (!d) return [];
-    var used = this.usedPorts(devId);
-    return portsOf(d.type).map(function (p) { return { name: p, connected: used.indexOf(p) !== -1 }; });
+    var d = this.get(devId), self = this, N = root.Netsim;
+    if (!d || d.type !== 'switch') return [];
+    return portsOf(d.type).map(function (p) {
+      var link = N.linkAt(self, devId, p);
+      return { name: p, cabled: !!link, up: !!link && N.linkUp(self, link), oper: N.operMode(self, d, p) };
+    });
   };
 
-  // Forget MAC addresses learned on ports that no longer have a cable.
+  // Forget MAC addresses learned on ports whose link is not up any more
+  // (cable removed, or either end shut down).
   Network.prototype.purgeTables = function () {
     var self = this;
     this.devices.forEach(function (d) {
       if (d.type !== 'switch') return;
-      var used = self.usedPorts(d.id);
-      d.sw.macTable = d.sw.macTable.filter(function (e) { return used.indexOf(e.port) !== -1; });
+      var up = self.portStates(d.id).filter(function (p) { return p.up; }).map(function (p) { return p.name; });
+      d.sw.macTable = d.sw.macTable.filter(function (e) { return up.indexOf(e.port) !== -1; });
     });
+  };
+
+  // Short label for a port end on the canvas, e.g. "Fa0/1 v10" for an access port in VLAN 10.
+  Network.prototype.portLabel = function (devId, port) {
+    var d = this.get(devId), label = shortPort(port);
+    if (d && d.type === 'switch') {
+      var cfg = d.sw.portCfg(port);
+      if (cfg.accessVlan !== 1 && root.Netsim.operMode(this, d, port) === 'access') label += ' v' + cfg.accessVlan;
+    }
+    return label;
   };
 
   // Apply a PC's IP settings. Returns an error message, or null on success.

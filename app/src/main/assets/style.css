@@ -12,6 +12,7 @@
   --ok: #46d390;
   --warn: #f5a83d;
   --err: #f58b79;
+  --trunk: #c9a7f2;
   --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Roboto Mono", "Droid Sans Mono", monospace;
 }
@@ -79,9 +80,12 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 .ic-stand { fill: #3d6178; }
 
 .cable { stroke: var(--cable); stroke-width: 2.5; stroke-linecap: round; fill: none; }
+.cable.trunk { stroke: var(--trunk); stroke-width: 4; }
+.cable.down { stroke: var(--err); stroke-dasharray: 6 5; }
 .cable.sel { stroke: var(--warn); stroke-width: 3.5; }
 .hit-line { stroke: transparent; stroke-width: 24; stroke-linecap: round; pointer-events: stroke; }
 .portdot { fill: var(--ok); stroke: var(--screen); stroke-width: 1.5; }
+.portdot.down { fill: var(--err); }
 .portlabel, .label { paint-order: stroke; stroke: var(--screen); stroke-width: 4px; stroke-linejoin: round; }
 .portlabel { fill: var(--dim); font: 10px var(--mono); }
 .label { fill: var(--text); font: 600 12px var(--ui); }
@@ -124,6 +128,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 .line.tab { white-space: pre; overflow-wrap: normal; }
 .line.dim { color: var(--dim); }
 .line.err { color: var(--err); }
+.line.sys { color: var(--warn); }
 .line.ok { color: var(--ok); }
 .echo .p { color: var(--cable); }
 .echo .c { color: #fff; }

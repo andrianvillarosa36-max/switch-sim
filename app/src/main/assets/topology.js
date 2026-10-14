@@ -214,18 +214,21 @@
       var a = net.get(l.a.dev), b = net.get(l.b.dev);
       if (!a || !b) return;
       var selected = ui.sel && ui.sel.kind === 'link' && ui.sel.id === l.id;
+      var N = root.Netsim, up = N.linkUp(net, l);
+      var trunk = up && a.type === 'switch' && b.type === 'switch' &&
+        N.operMode(net, a, l.a.port) === 'trunk' && N.operMode(net, b, l.b.port) === 'trunk';
       var g = S('g', { 'data-kind': 'link', 'data-id': l.id }, r.links);
       S('line', { 'class': 'hit-line', x1: a.x, y1: a.y, x2: b.x, y2: b.y }, g);
-      S('line', { 'class': 'cable' + (selected ? ' sel' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, g);
+      S('line', { 'class': 'cable' + (trunk ? ' trunk' : '') + (up ? '' : ' down') + (selected ? ' sel' : ''), x1: a.x, y1: a.y, x2: b.x, y2: b.y }, g);
 
       var dx = b.x - a.x, dy = b.y - a.y, len = Math.sqrt(dx * dx + dy * dy);
       if (len < 1) return;
       var ux = dx / len, uy = dy / len;
       function end(dev, sx, sy, port) {
         var dotR = Math.min(46, len * 0.28), labR = Math.min(60, len * 0.4);
-        S('circle', { 'class': 'portdot', cx: dev.x + sx * dotR, cy: dev.y + sy * dotR, r: 4.5 }, g);
+        S('circle', { 'class': 'portdot' + (up ? '' : ' down'), cx: dev.x + sx * dotR, cy: dev.y + sy * dotR, r: 4.5 }, g);
         var t = S('text', { 'class': 'portlabel', x: dev.x + sx * labR - sy * 10, y: dev.y + sy * labR + sx * 10 + 3, 'text-anchor': 'middle' }, g);
-        t.textContent = root.Network.shortPort(port);
+        t.textContent = net.portLabel(dev.id, port);
       }
       end(a, ux, uy, l.a.port);
       end(b, -ux, -uy, l.b.port);

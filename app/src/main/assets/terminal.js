@@ -20,6 +20,7 @@
   }
 
   function classify(t) {
+    if (/^%[A-Z0-9_]+-\d-[A-Z0-9_]+:/.test(t)) return 'sys';     // syslog-style status messages
     return (t.charAt(0) === '%' || /^\s*\^$/.test(t)) ? 'err' : '';
   }
 

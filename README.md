@@ -15,12 +15,29 @@ Works offline.
   - *Settings*: IP address, subnet mask (left empty, it defaults from the address) and
     default gateway.
   - *Prompt*: `ipconfig` (`/all` for the MAC), `ping <ip>` (`-n count` too), `arp -a`, `arp -d`, `help`.
-- **Switches:** select one and tap **Console** (or double-tap it). Besides the basics
-  (`enable`, `configure terminal`, `hostname`, `enable secret`, `copy running-config
-  startup-config`, `reload`), there are now `show mac address-table`,
-  `show interfaces status` and `clear mac address-table dynamic`.
+- **Switches:** select one and tap **Console** (or double-tap it).
+  - Basics: `enable`, `configure terminal`, `hostname`, `enable secret`,
+    `copy running-config startup-config`, `reload`, `show running-config`.
+  - VLANs: `vlan 10` / `name Sales`, `no vlan 10`, `show vlan brief`.
+  - Interfaces: `interface fa0/1`, `interface range fa0/1 - 4` (also `fa0/1-4`, `fa0/1 - fa0/4`,
+    comma lists), `description`, `shutdown` / `no shutdown`, and global commands still work from
+    inside an interface or VLAN, as on a real switch.
+  - Switchports: `switchport mode access | trunk | dynamic auto | dynamic desirable`,
+    `switchport access vlan 10`, `switchport trunk native vlan 99`,
+    `switchport trunk allowed vlan 10,20 | add | remove | all | none`, and the `no` forms.
+  - Checking: `show interfaces status`, `show interfaces trunk`, `show mac address-table`,
+    `clear mac address-table dynamic`.
+- **On the canvas:** trunk links are drawn in lavender, shut-down links are red and dashed,
+  and an access port in a non-default VLAN shows it (`Fa0/1 v10`).
 
-Try it: add two PCs and a switch, cable PC1 to the switch and PC2 to the switch, give them
+VLAN lab: two switches (SW1, SW2), a PC on each, both PCs `192.168.1.x`. On each switch put
+`fa0/1` in VLAN 10 (`interface fa0/1`, `switchport mode access`, `switchport access vlan 10`).
+Ping fails across the plain cable, because VLAN 10 does not leave the switch. On SW1 set the
+uplink to `switchport mode trunk` and the ping works (SW2's default dynamic auto port negotiates
+a trunk). Then try `switchport trunk allowed vlan 20` on the trunk, or a different native VLAN
+on each side, and see what breaks.
+
+Basic lab: add two PCs and a switch, cable PC1 to the switch and PC2 to the switch, give them
 `192.168.1.10` and `192.168.1.20`, then `ping 192.168.1.20` from PC1. The first reply is slower
 because of ARP. Open the switch and run `show mac address-table` to see it learned both PCs.
 Run `clear mac address-table dynamic`, ping again, and watch it relearn.
@@ -34,13 +51,21 @@ Run `clear mac address-table dynamic`, ping again, and watch it relearn.
   unreachable"; with a gateway but no router, requests time out (routers arrive in stage 4).
 - A frame is handled once per switch, so a cable loop cannot flood forever. There is no
   spanning tree.
-- Not yet: VLANs, trunks, port shutdown, routers.
+- VLANs: ports are access or trunk. MAC learning, forwarding and flooding are per VLAN. Trunks
+  tag every VLAN except the native one, honour the allowed list, and only carry VLANs that exist
+  on both ends' switches. Default ports are `dynamic auto`, and they negotiate a trunk when the
+  neighbour is a trunk or `dynamic desirable` (as DTP does). PCs ignore tagged frames.
+- Shutting a port brings the link down at both ends and flushes its MAC entries.
+- The VLAN database is kept apart from the config, like vlan.dat: it survives `reload` and is not
+  affected by `copy running-config startup-config`.
+- Not yet: routers, inter-VLAN routing, switch management IPs (`interface vlan 1`), spanning tree,
+  VTP, `show interfaces <port> switchport`.
 
 ## How it is built
 
 - `app/src/main/assets/` is the actual app, plain HTML/JS:
-  - `engine.js` the simulated IOS switch (one instance per switch)
-  - `netsim.js` IP rules, MAC learning and flooding, ARP, ping
+  - `engine.js` the simulated IOS switch (one instance per switch): modes, VLAN database, ports
+  - `netsim.js` IP rules, per-VLAN switching (access, trunk, negotiation), ARP, ping
   - `pcshell.js` the PC command prompt
   - `network.js` devices, ports, cables, PC settings (no drawing code)
   - `topology.js` the canvas: drawing, touch gestures, cable mode, selection bar
@@ -59,7 +84,7 @@ cp -r ~/switch-sim-new/switch-sim/. ~/switch-sim/
 rm -f ~/switch-sim/app/src/main/assets/lesson1.js      # the lesson was removed
 cd ~/switch-sim
 git add -A
-git commit -m "Stage 2: PC addressing and ping"
+git commit -m "Stage 3: VLANs and trunks"
 git push
 ```
 
@@ -72,14 +97,14 @@ topology and switch configurations.
 ```sh
 cd app/src/main/assets
 python -m http.server 8080                 # open http://localhost:8080 in the phone browser
-cd ../../../.. && for t in engine network netsim; do node tests/$t.test.js; done
+cd ../../../.. && for t in engine network netsim vlan; do node tests/$t.test.js; done
 ```
 
 ## Roadmap
 
 1. Topology canvas (done)
 2. PCs with IP settings and ping through switches with MAC learning (done)
-3. VLANs and trunks (`vlan`, `switchport mode`, `show vlan brief`) that actually affect traffic
+3. VLANs and trunks that actually affect traffic (done)
 4. Routers, static routes, inter-VLAN routing
 5. Packet animation, saved topologies, labs that check the whole network
 

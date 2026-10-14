@@ -174,9 +174,9 @@ test('show mac address-table, clear it, and reload empties it', () => {
 test('show interfaces status uses the cables the network reports', () => {
   const sw = new SwitchSim();
   sw.portInfo = () => [
-    { name: 'FastEthernet0/1', connected: true },
-    { name: 'FastEthernet0/2', connected: false },
-    { name: 'GigabitEthernet0/1', connected: false }
+    { name: 'FastEthernet0/1', cabled: true, up: true, oper: 'access' },
+    { name: 'FastEthernet0/2', cabled: false, up: false, oper: 'access' },
+    { name: 'GigabitEthernet0/1', cabled: false, up: false, oper: 'access' }
   ];
   sw.exec('enable');
   const out = sw.exec('show int status');

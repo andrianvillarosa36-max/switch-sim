@@ -18,6 +18,7 @@ jobs:
           node tests/engine.test.js
           node tests/network.test.js
           node tests/netsim.test.js
+          node tests/vlan.test.js
 
       - uses: actions/setup-java@v4
         with:
