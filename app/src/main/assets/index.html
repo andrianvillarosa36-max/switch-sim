@@ -26,14 +26,27 @@
           <g id="world">
             <g id="layer-links"></g>
             <g id="layer-devs"></g>
+            <g id="layer-fx"></g>
           </g>
         </svg>
         <div class="canvastools">
+          <button id="net-replay" class="ghost" type="button" hidden>Replay</button>
           <button id="net-fit" class="ghost" type="button">Fit</button>
           <button id="net-clear" class="ghost" type="button">Clear</button>
         </div>
       </div>
       <div id="netbar" class="netbar"></div>
+      <div id="playbar" class="playbar" hidden>
+        <span id="pstep" class="nbtitle"></span>
+        <div id="plines" class="plines"></div>
+        <div class="pacts">
+          <button id="p-prev" class="abtn" type="button">Back</button>
+          <button id="p-play" class="abtn primary" type="button">Pause</button>
+          <button id="p-next" class="abtn" type="button">Next</button>
+          <button id="p-speed" class="abtn" type="button">1x</button>
+          <button id="p-close" class="abtn" type="button">Close</button>
+        </div>
+      </div>
     </section>
 
     <!-- One device: switch console, or PC settings and command prompt -->
@@ -41,6 +54,7 @@
       <div class="consolebar">
         <button id="console-back" class="ghost" type="button">Back</button>
         <span id="console-title" class="ctitle"></span>
+        <button id="console-watch" class="ghost" type="button" hidden>Watch</button>
         <div id="pc-tabs" class="tabs" role="tablist" aria-label="PC screens" hidden>
           <button id="pc-tab-settings" type="button" role="tab" aria-selected="true">Settings</button>
           <button id="pc-tab-cmd" type="button" role="tab" aria-selected="false">Prompt</button>

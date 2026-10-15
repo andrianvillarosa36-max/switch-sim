@@ -38,6 +38,9 @@
     this.devices = [];
     this.links = [];
     this.nextId = 1;
+    this.trace = [];          // events from the last ping, for the packet animation (not saved)
+    this.traceClock = 0;
+    this.rip = null;          // RIP routes, recomputed on demand (not saved)
     if (data) this.load(data);
   }
 
@@ -91,6 +94,9 @@
       d.rt.clearArp = function () { d.arp = {}; };
       d.rt.ping = function (ip) { return root.Netsim.pingOnce(self, d, ip); };
       d.rt.portsChanged = function () { self.purgeTables(); };
+      d.rt.ripRoutes = function () { var r = root.Netsim.refreshRip(self); return r.routes[d.id] || []; };
+      d.rt.ripNeighbors = function () { var r = root.Netsim.refreshRip(self); return r.neighbors[d.id] || []; };
+      d.rt.traceReset = function () { root.Netsim.beginTrace(self); };
       d.term = target(d.rt);
     } else {
       d.cfg = { ip: '', mask: '', gateway: '' };
@@ -176,11 +182,13 @@
   };
 
   Network.prototype.removeLink = function (id) {
+    this.trace = []; this.traceClock = 0;
     this.links = this.links.filter(function (l) { return l.id !== id; });
     this.purgeTables();
   };
 
   Network.prototype.removeDevice = function (id) {
+    this.trace = []; this.traceClock = 0;
     this.devices = this.devices.filter(function (d) { return d.id !== id; });
     this.links = this.links.filter(function (l) { return l.a.dev !== id && l.b.dev !== id; });
     this.purgeTables();
@@ -200,6 +208,7 @@
   };
 
   Network.prototype.clear = function () {
+    this.trace = []; this.traceClock = 0;
     this.devices = [];
     this.links = [];
   };

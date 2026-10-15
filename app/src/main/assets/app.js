@@ -49,12 +49,21 @@
     $('pc-msg').className = 'pcmsg' + (cls ? ' ' + cls : '');
   }
 
+  // Show Watch whenever there is traffic to replay on the map.
+  function updateWatch() { $('console-watch').hidden = !(topo && topo.net.trace.length); }
+
+  $('console-watch').addEventListener('click', function () {
+    closeDevice();
+    topo.startPlayback();
+  });
+
   function openDevice(dev) {
     var isPc = dev.type === 'pc';
     consoleDev = dev;
     $('console-title').textContent = isPc ? dev.name : dev.name + ' console';
     $('pc-tabs').hidden = !isPc;
     devView.attach(dev.term);
+    updateWatch();
     $('pc-settings').hidden = true;
     $('console-host').hidden = false;
     showScreen();
@@ -105,13 +114,15 @@
   function boot() {
     var saved = loadState();
 
-    devView = new window.TerminalView($('console-host'), { onCommand: saveAll });
+    devView = new window.TerminalView($('console-host'), { onCommand: function () { saveAll(); updateWatch(); } });
 
     topo = new window.Topology({
       svg: $('net'), world: $('world'), links: $('layer-links'), devs: $('layer-devs'),
       bar: $('netbar'), toolbar: $('toolbar'),
       cable: $('tool-cable'), addSwitch: $('add-switch'), addPc: $('add-pc'), addRouter: $('add-router'),
-      clear: $('net-clear'), fit: $('net-fit')
+      clear: $('net-clear'), fit: $('net-fit'), replay: $('net-replay'), fx: $('layer-fx'),
+      playbar: $('playbar'),
+      pb: { step: $('pstep'), lines: $('plines'), prev: $('p-prev'), play: $('p-play'), next: $('p-next'), speed: $('p-speed'), close: $('p-close') }
     }, { onChange: saveAll, openConsole: openDevice });
     if (saved && saved.net) topo.load(saved.net);
 

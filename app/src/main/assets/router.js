@@ -25,7 +25,8 @@
 
   function defaultPort() { return { ip: '', mask: '', shutdown: true, description: '' }; }
   function defaultSub() { return { vid: 0, ip: '', mask: '', shutdown: false, description: '' }; }
-  function defaultConfig() { return { hostname: 'Router', secret: null, password: null, ports: {}, subifs: {}, routes: [] }; }
+  function defaultRip() { return { enabled: false, version: 1, networks: [], passive: [], autoSummary: true }; }
+  function defaultConfig() { return { hostname: 'Router', secret: null, password: null, ports: {}, subifs: {}, routes: [], rip: defaultRip() }; }
   function clone(c) { return JSON.parse(JSON.stringify(c)); }
   function sameConfig(a, b) { return K.stable(a) === K.stable(b); }
 
@@ -62,6 +63,15 @@
       if (r && validIp(r.net) && validIp(r.mask) && validIp(r.nh)) routes.push({ net: r.net, mask: r.mask, nh: r.nh });
     });
     c.ports = out; c.subifs = subs; c.routes = routes;
+    var rp = s.rip || {}, rip = defaultRip();
+    if (rp.enabled === true) rip.enabled = true;
+    if (rp.version === 2) rip.version = 2;
+    if (rp.autoSummary === false) rip.autoSummary = false;
+    (Array.isArray(rp.networks) ? rp.networks : []).forEach(function (n) {
+      if (validIp(n) && N().classfulNet(n) === n && rip.networks.indexOf(n) === -1) rip.networks.push(n);
+    });
+    (Array.isArray(rp.passive) ? rp.passive : []).forEach(function (n) { if (parseName(n) && rip.passive.indexOf(n) === -1) rip.passive.push(n); });
+    c.rip = rip;
     return c;
   }
 
@@ -94,6 +104,14 @@
       iface(n, Object.assign(defaultPort(), c.ports[n]), false);
       Object.keys(c.subifs).filter(function (s) { return s.indexOf(n + '.') === 0; }).sort().forEach(function (s) { iface(s, c.subifs[s], true); });
     });
+    if (c.rip.enabled) {
+      L.push('router rip');
+      if (c.rip.version === 2) L.push(' version 2');
+      c.rip.passive.forEach(function (n) { L.push(' passive-interface ' + n); });
+      c.rip.networks.forEach(function (n) { L.push(' network ' + n); });
+      if (!c.rip.autoSummary) L.push(' no auto-summary');
+      L.push('!');
+    }
     c.routes.forEach(function (r) { L.push('ip route ' + r.net + ' ' + r.mask + ' ' + r.nh); });
     if (c.routes.length) L.push('!');
     L.push('end');
@@ -249,6 +267,54 @@
     return [];
   }
 
+  /* --- RIP --- */
+
+  function cmdRouterRip(rt) { rt.running.rip.enabled = true; rt.mode = 'config-router'; return []; }
+  function cmdNoRouterRip(rt) { rt.running.rip = defaultRip(); return []; }
+
+  function cmdRipVersion(rt, args, at) {
+    if (args[0] !== '1' && args[0] !== '2') return bad(rt, at[0]);
+    rt.running.rip.version = Number(args[0]);
+    return [];
+  }
+
+  function cmdRipNetwork(rt, args, at) {
+    if (!validIp(args[0])) return bad(rt, at[0]);
+    var net = N().classfulNet(args[0]), nets = rt.running.rip.networks;
+    if (nets.indexOf(net) === -1) { nets.push(net); nets.sort(function (a, b) { return N().parseIp(a) - N().parseIp(b); }); }
+    return [];
+  }
+
+  function cmdNoRipNetwork(rt, args, at) {
+    if (!validIp(args[0])) return bad(rt, at[0]);
+    var net = N().classfulNet(args[0]);
+    rt.running.rip.networks = rt.running.rip.networks.filter(function (n) { return n !== net; });
+    return [];
+  }
+
+  function cmdRipPassive(rt, args, at, on) {
+    var p = parseName(args.join(''));
+    if (!p) return bad(rt, at[0]);
+    var list = rt.running.rip.passive;
+    if (on && list.indexOf(p.name) === -1) list.push(p.name);
+    if (!on) rt.running.rip.passive = list.filter(function (n) { return n !== p.name; });
+    return [];
+  }
+
+  function cmdShowProtocols(rt) {
+    var rip = rt.running.rip;
+    if (!rip.enabled) return [];
+    var L = ['Routing Protocol is "rip"', '  Sending updates every 30 seconds', '  Default version control:',
+      '    send version ' + rip.version + ', receive version 1 2', '  Routing for Networks:'];
+    rip.networks.forEach(function (n) { L.push('    ' + n); });
+    if (rip.passive.length) { L.push('  Passive Interface(s):'); rip.passive.forEach(function (n) { L.push('    ' + n); }); }
+    var gws = rt.ripNeighbors ? rt.ripNeighbors() : [];
+    L.push('  Routing Information Sources:', '    Gateway   Distance');
+    gws.forEach(function (g) { L.push('    ' + pad(g, 10) + '120'); });
+    L.push('  Distance: (default is 120)');
+    return L;
+  }
+
   function cmdShowRun(rt) {
     var body = configBody(rt.running);
     return ['Building configuration...', '', 'Current configuration : ' + body.join('\n').length + ' bytes'].concat(body);
@@ -276,8 +342,16 @@
       if (isDefault) gateway = r.nh;
       rows.push({ key: n.parseIp(r.net) + 0.25, line: (isDefault ? 'S* ' : 'S  ') + r.net + '/' + bits(r.mask) + ' [1/0] via ' + r.nh });
     });
+    // a RIP route is hidden when a connected or static route to the same prefix has a better distance
+    var better = {};
+    ifs.forEach(function (i) { var m = n.parseIp(i.mask); better[n.ipStr(n.networkOf(n.parseIp(i.ip), m)) + '/' + n.maskBits(m)] = true; });
+    rows.forEach(function (r) { var m = /^S\*? +(\S+) /.exec(r.line); if (m) better[m[1]] = true; });
+    (rt.ripRoutes ? rt.ripRoutes() : []).forEach(function (r) {
+      if (better[r.net + '/' + bits(r.mask)]) return;
+      rows.push({ key: n.parseIp(r.net) + 0.75, line: 'R  ' + r.net + '/' + bits(r.mask) + ' [120/' + r.metric + '] via ' + r.nh + ', ' + short(r.ifName) });
+    });
     rows.sort(function (a, b) { return a.key - b.key; });
-    var L = ['Codes: C - connected, S - static, L - local', '', gateway ? 'Gateway of last resort is ' + gateway + ' to network 0.0.0.0' : 'Gateway of last resort is not set', ''];
+    var L = ['Codes: C - connected, S - static, R - RIP, L - local', '', gateway ? 'Gateway of last resort is ' + gateway + ' to network 0.0.0.0' : 'Gateway of last resort is not set', ''];
     return L.concat(rows.map(function (r) { return r.line; }));
   }
 
@@ -309,6 +383,7 @@
     var n = N(), dest = n.parseIp(args[0]);
     if (dest === null) return ['% Unrecognized host or address, or protocol not running.'];
     var target = n.ipStr(dest), marks = '', oks = [], i;
+    if (rt.traceReset) rt.traceReset();
     for (i = 0; i < 5; i++) {
       var r = rt.ping ? rt.ping(target) : { ok: false, text: '' };
       // like a real router, the first echo is lost while ARP resolves the next hop
@@ -412,6 +487,7 @@
     { p: 'show ip arp', run: cmdShowArp, desc: 'IP ARP table' },
     { p: 'show ip interface', desc: 'IP interface status and configuration' },
     { p: 'show ip interface brief', run: cmdShowIfBrief, desc: 'Brief summary of IP status and configuration' },
+    { p: 'show ip protocols', run: cmdShowProtocols, desc: 'IP routing protocol process parameters and statistics' },
     { p: 'show ip route', run: cmdShowRoute, desc: 'IP routing table' },
     { p: 'show running-config', run: cmdShowRun, desc: 'Current operating configuration' },
     { p: 'show startup-config', run: cmdShowStart, desc: 'Contents of the startup configuration' },
@@ -428,9 +504,13 @@
     { p: 'hostname <name>', run: cmdHostname, desc: "Set the system's network name", arg: "This system's network name" },
     { p: 'interface <type>', run: cmdInterface, desc: 'Select an interface to configure', arg: 'Interface, for example g0/0 or g0/0.10' },
     { p: 'interface <type> <number>', run: cmdInterface, arg: 'Interface number, for example 0/0' },
+    { p: 'router', desc: 'Enable a routing process' },
+    { p: 'router rip', run: cmdRouterRip, desc: 'Routing Information Protocol (RIP)' },
     { p: 'ip', desc: 'Global IP configuration subcommands' },
     { p: 'ip route <net> <mask> <next-hop>', run: cmdIpRoute, desc: 'Establish static routes', arg: 'Destination prefix, mask and next-hop address' },
     { p: 'no', desc: 'Negate a command or set its defaults' },
+    { p: 'no router', desc: 'Disable a routing process' },
+    { p: 'no router rip', run: cmdNoRouterRip, desc: 'Routing Information Protocol (RIP)' },
     { p: 'no enable', desc: 'Modify enable password parameters' },
     { p: 'no enable password', run: function (rt) { rt.running.password = null; return []; }, desc: 'Assign the privileged level password (plain text)' },
     { p: 'no enable secret', run: function (rt) { rt.running.secret = null; return []; }, desc: 'Assign the privileged level secret' },
@@ -460,12 +540,25 @@
     for (var k = 1; k <= 8; k++) { tail += ' <w>'; IF_CMDS.push({ p: 'description' + tail, run: cmdDescription, arg: 'Up to 240 characters describing this interface' }); }
   })();
 
+  var RIP_CMDS = [
+    { p: 'auto-summary', run: function (rt) { rt.running.rip.autoSummary = true; return []; }, desc: 'Enable automatic network number summarization' },
+    { p: 'end', run: function (rt) { rt.mode = 'priv'; return []; }, desc: 'Exit from configure mode' },
+    { p: 'exit', run: function (rt) { rt.mode = 'config'; return []; }, desc: 'Exit from routing protocol configuration mode' },
+    { p: 'network <ip>', run: cmdRipNetwork, desc: 'Enable routing on an IP network', arg: 'Network number, for example 192.168.1.0' },
+    { p: 'no', desc: 'Negate a command or set its defaults' },
+    { p: 'no auto-summary', run: function (rt) { rt.running.rip.autoSummary = false; return []; }, desc: 'Enable automatic network number summarization' },
+    { p: 'no network <ip>', run: cmdNoRipNetwork, desc: 'Enable routing on an IP network', arg: 'Network number' },
+    { p: 'no passive-interface <type>', run: function (rt, a, at) { return cmdRipPassive(rt, a, at, false); }, desc: 'Suppress routing updates on an interface', arg: 'Interface, for example g0/0' },
+    { p: 'passive-interface <type>', run: function (rt, a, at) { return cmdRipPassive(rt, a, at, true); }, desc: 'Suppress routing updates on an interface', arg: 'Interface, for example g0/0' },
+    { p: 'version <v>', run: cmdRipVersion, desc: 'Set routing protocol version', arg: 'Version number, 1 or 2' }
+  ];
+
   var TRIES = {
     user: K.buildTrie(USER_CMDS), priv: K.buildTrie(PRIV_CMDS), config: K.buildTrie(CONFIG_CMDS),
-    'config-if': K.buildTrie(IF_CMDS), 'config-subif': K.buildTrie(IF_CMDS)
+    'config-if': K.buildTrie(IF_CMDS), 'config-subif': K.buildTrie(IF_CMDS), 'config-router': K.buildTrie(RIP_CMDS)
   };
-  var SUB_MODES = { 'config-if': true, 'config-subif': true };
-  var SUFFIX = { user: '>', priv: '#', config: '(config)#', 'config-if': '(config-if)#', 'config-subif': '(config-subif)#' };
+  var SUB_MODES = { 'config-if': true, 'config-subif': true, 'config-router': true };
+  var SUFFIX = { user: '>', priv: '#', config: '(config)#', 'config-if': '(config-if)#', 'config-subif': '(config-subif)#', 'config-router': '(config-router)#' };
 
   /* ---------- the router ---------- */
 
@@ -481,6 +574,9 @@
     this.clearArp = null;      // set by the network
     this.ping = null;          // set by the network: (ip) => ping result
     this.portsChanged = null;  // set by the network
+    this.ripRoutes = null;     // set by the network: () => learned RIP routes
+    this.ripNeighbors = null;  // set by the network: () => neighbour addresses
+    this.traceReset = null;    // set by the network: start a new packet trace
     if (saved) this.load(saved);
   }
 

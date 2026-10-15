@@ -106,6 +106,7 @@
     if (dest === null) return ['Ping request could not find host ' + args[0] + '. Please check the name and try again.'];
 
     var target = N.ipStr(dest), job = [], got = [], i;
+    N.beginTrace(this.net);
     for (i = 0; i < count; i++) {
       var r = N.pingOnce(this.net, this.dev, target);
       if (r.ok) {

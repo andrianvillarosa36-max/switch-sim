@@ -174,3 +174,25 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--cable); out
 .pcmsg.ok { color: var(--ok); }
 .pcmsg.bad { color: var(--err); }
 .pcact { display: flex; gap: 10px; }
+
+/* ---------- packet animation ---------- */
+
+#layer-fx { pointer-events: none; }
+.pkt rect { fill: var(--cable); stroke: var(--screen); stroke-width: 1.5; }
+.pkt.arp rect { fill: var(--warn); }
+.pkt.rep rect { fill: var(--ok); }
+.pkt.err rect { fill: var(--err); }
+.pkt.tag rect { stroke: var(--trunk); stroke-width: 2.5; }
+.pkt text { fill: var(--text); font: 600 9px var(--mono); paint-order: stroke; stroke: var(--screen); stroke-width: 3px; stroke-linejoin: round; }
+.fxmark.drop circle { fill: var(--err); stroke: var(--screen); stroke-width: 1.5; }
+.fxmark.drop path { stroke: #fff; stroke-width: 2; stroke-linecap: round; }
+.fxmark.learn circle { fill: rgba(70, 211, 144, 0.25); stroke: var(--ok); stroke-width: 2; }
+
+.playbar { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--panel); }
+.plines { max-height: 96px; overflow-y: auto; font-size: 13px; line-height: 1.35; }
+.plines div { padding: 1px 0; overflow-wrap: anywhere; }
+.plines .drop { color: var(--err); }
+.plines .learn { color: var(--ok); }
+.pacts { display: flex; gap: 6px; }
+.pacts .abtn { flex: 1; padding: 8px 4px; min-width: 0; }
+.pacts .abtn:disabled { opacity: 0.4; }

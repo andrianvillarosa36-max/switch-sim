@@ -37,6 +37,17 @@ Works offline.
     (`ip route 0.0.0.0 0.0.0.0 10.0.0.2`).
   - Checking: `show ip route`, `show ip interface brief`, `show ip arp`, `clear arp-cache`,
     `ping <ip>`, `show running-config`, `copy running-config startup-config`, `reload`.
+- **RIP:** on a router, `router rip` opens the RIP mode: `version 2`, `network 10.0.0.0`
+  (any address is turned into its classful network), `passive-interface g0/0`,
+  `no auto-summary`, `no router rip`. Check it with `show ip route` (RIP routes are `R`,
+  distance 120, metric = hop count) and `show ip protocols`.
+- **Watch the packets:** after a `ping` on a PC or router, tap **Watch** (or **Replay** on the
+  canvas). The player steps through the traffic one cable hop at a time: ARP requests
+  flooding out of a switch, the switch learning a MAC address, VLAN-tagged frames on trunks,
+  routers forwarding with TTL counting down, and where a packet gets dropped and why.
+  Use **Play/Pause**, **Back/Next** to step, and **1x** to change the speed (0.5x, 1x, 2x).
+  Colours: amber is ARP, blue a ping request, green a reply, red an error; a lavender
+  outline means the frame is VLAN-tagged.
 - **On the canvas:** trunk links are drawn in lavender, shut-down links are red and dashed,
   and an access port in a non-default VLAN shows it (`Fa0/1 v10`).
 
@@ -58,6 +69,12 @@ Routing labs:
 3. *Inter-VLAN routing:* the VLAN lab above, plus a router cabled to the switch's trunk port, with
    subinterfaces `g0/0.10` and `g0/0.20` using `encapsulation dot1q`. Do not forget
    `no shutdown` on `g0/0` itself.
+
+RIP lab: take the *two routers* lab and enable RIP instead of typing static routes: on each
+router `router rip`, `version 2`, then a `network` line for every network it should advertise
+(for example `10.0.0.0` and `192.168.1.0`). Add a third router and `show ip route` shows metrics
+growing with hops. Try `passive-interface` on one side, or shut an interface, and watch the
+routes disappear; with two paths between routers, shut one and see RIP fail over.
 
 Basic lab: add two PCs and a switch, cable PC1 to the switch and PC2 to the switch, give them
 `192.168.1.10` and `192.168.1.20`, then `ping 192.168.1.20` from PC1. The first reply is slower
@@ -86,14 +103,22 @@ Run `clear mac address-table dynamic`, ping again, and watch it relearn.
   sends back "Destination host unreachable". A router ping loses its first echo while ARP resolves
   the next hop (`.!!!!`), as real routers do. A routing loop ends quietly after a bounded number of
   hops rather than counting down TTL.
-- Not yet: RIP/OSPF, DHCP, ACLs and NAT, switch management IPs (`interface vlan 1`), spanning tree,
+- RIP: neighbours are found by delivering a real multicast frame, so VLANs, trunks and shut
+  ports affect adjacency. The simulator converges instantly (no 30-second timers), uses hop
+  count with 16 as unreachable, applies split horizon, and prefers connected, then static (1),
+  then RIP (120). `version 1` is accepted but updates always carry masks (like version 2), and
+  `auto-summary` is accepted but not simulated.
+- The animation replays the last console command's traffic: events are recorded as the
+  simulator works, then played back by distance in cable hops. It is not saved.
+- Not yet: OSPF/EIGRP, DHCP, ACLs and NAT, switch management IPs (`interface vlan 1`), spanning tree,
   VTP, `show interfaces <port> switchport`.
 
 ## How it is built
 
 - `app/src/main/assets/` is the actual app, plain HTML/JS:
   - `engine.js` the simulated IOS switch (one instance per switch): modes, VLAN database, ports
-  - `netsim.js` IP rules, per-VLAN switching (access, trunk, negotiation), ARP, routing, ping
+  - `netsim.js` IP rules, per-VLAN switching (access, trunk, negotiation), ARP, routing, RIP,
+    ping, and the event trace behind the animation
   - `pcshell.js` the PC command prompt
   - `router.js` the simulated IOS router
   - `network.js` devices, ports, cables, PC settings (no drawing code)
@@ -113,7 +138,7 @@ cp -r ~/switch-sim-new/switch-sim/. ~/switch-sim/
 rm -f ~/switch-sim/app/src/main/assets/lesson1.js      # the lesson was removed
 cd ~/switch-sim
 git add -A
-git commit -m "Stage 4: routers, plus app icon"
+git commit -m "Packet animation and RIP"
 git push
 ```
 
@@ -126,7 +151,7 @@ topology and switch configurations.
 ```sh
 cd app/src/main/assets
 python -m http.server 8080                 # open http://localhost:8080 in the phone browser
-cd ../../../.. && for t in engine network netsim vlan router; do node tests/$t.test.js; done
+cd ../../../.. && for t in engine network netsim vlan router trace rip; do node tests/$t.test.js; done
 ```
 
 ## Roadmap
@@ -135,7 +160,7 @@ cd ../../../.. && for t in engine network netsim vlan router; do node tests/$t.t
 2. PCs with IP settings and ping through switches with MAC learning (done)
 3. VLANs and trunks that actually affect traffic (done)
 4. Routers, static routes, inter-VLAN routing (done)
-5. Packet animation, saved topologies, labs that check the whole network
+5. Packet animation (done), then saved topologies and labs that check the whole network
 
 ## App icon
 

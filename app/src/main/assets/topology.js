@@ -81,11 +81,13 @@
     this._saveTimer = 0;
     this._clearTimer = 0;
     this._lastTap = { id: null, t: 0 };
+    this.pb = null;                 // packet playback state, see startPlayback()
 
     var icons = refs.toolbar.querySelectorAll('.ico');
     for (var i = 0; i < icons.length; i++) icons[i].appendChild(iconSvg(icons[i].getAttribute('data-icon')));
 
     this._bind();
+    this._bindPlayback();
     this.render();
   }
 
@@ -200,6 +202,7 @@
     this.renderBar();
     this.r.cable.setAttribute('aria-pressed', String(this.ui.tool === 'cable'));
     this.r.clear.textContent = this.ui.clearArmed ? 'Tap to clear' : 'Clear';
+    this.r.replay.hidden = !this.net.trace.length;
   };
 
   Topology.prototype.requestDraw = function () {
@@ -531,6 +534,144 @@
       clearTimeout(self._clearTimer);
       self._clearTimer = setTimeout(function () { ui.clearArmed = false; self.render(); }, 3000);
     });
+  };
+
+
+  /* ---------- packet playback ---------- */
+
+  var STEP_MS = 900;       // time a frame takes to cross one cable at 1x
+  var GAP_MS = 450;        // pause between steps while playing
+  var SPEEDS = [0.5, 1, 2];
+  var LABELS = { 'arp-req': 'ARP', 'arp-rep': 'ARP', 'icmp-req': 'ping', 'icmp-rep': 'reply', 'icmp-unreach': 'unreach', 'icmp-ttl': 'TTL' };
+
+  function pktClass(type, tagged) {
+    var c = type.indexOf('arp') === 0 ? 'arp' : type === 'icmp-rep' ? 'rep' : type === 'icmp-req' ? 'req' : 'err';
+    return 'pkt ' + c + (tagged ? ' tag' : '');
+  }
+
+  // Replay the last traffic (the ARP, pings and replies of the last console command), one step per cable hop.
+  Topology.prototype.startPlayback = function () {
+    var tr = this.net.trace.slice();
+    if (!tr.length) return false;
+    this.stopPlayback();
+    var times = [];
+    tr.forEach(function (e) { if (times.indexOf(e.t) === -1) times.push(e.t); });
+    times.sort(function (a, b) { return a - b; });
+    this.pb = { events: tr, times: times, i: -1, playing: true, speed: 1, raf: 0, timer: 0 };
+    this.r.bar.hidden = true;
+    this.r.playbar.hidden = false;
+    this._pbGo(0);
+    return true;
+  };
+
+  Topology.prototype.stopPlayback = function () {
+    var pb = this.pb;
+    if (!pb) return;
+    cancelAnimationFrame(pb.raf);
+    clearTimeout(pb.timer);
+    this.pb = null;
+    this.r.fx.textContent = '';
+    this.r.playbar.hidden = true;
+    this.r.bar.hidden = false;
+    this.renderBar();
+  };
+
+  Topology.prototype._pbPos = function (id) {
+    var d = this.net.get(id);
+    return d ? { x: d.x, y: d.y } : null;
+  };
+
+  // Show step i: animate its packets and describe it.
+  Topology.prototype._pbGo = function (i) {
+    var self = this, pb = this.pb, r = this.r, net = this.net;
+    cancelAnimationFrame(pb.raf);
+    clearTimeout(pb.timer);
+    i = Math.max(0, Math.min(pb.times.length - 1, i));
+    pb.i = i;
+    r.fx.textContent = '';
+    var evs = pb.events.filter(function (e) { return e.t === pb.times[i]; });
+
+    r.pb.step.textContent = 'Step ' + (i + 1) + ' of ' + pb.times.length;
+    r.pb.lines.textContent = '';
+    evs.forEach(function (e) {
+      var d = H('div', e.kind === 'move' ? '' : e.kind, e.text);
+      r.pb.lines.appendChild(d);
+    });
+    r.pb.lines.scrollTop = 0;
+
+    var packets = [];
+    evs.forEach(function (e) {
+      if (e.kind === 'move') {
+        var a = self._pbPos(e.from.dev), b = self._pbPos(e.to.dev);
+        if (!a || !b) return;
+        var g = S('g', { 'class': pktClass(e.type, e.tagged) }, r.fx);
+        S('rect', { x: -8, y: -5, width: 16, height: 10, rx: 2 }, g);
+        S('text', { y: -9, 'text-anchor': 'middle' }, g).textContent = LABELS[e.type] || '';
+        packets.push({ g: g, from: e.from.dev, to: e.to.dev });
+      } else {
+        var p = self._pbPos(e.dev);
+        if (!p) return;
+        var m = S('g', { 'class': 'fxmark ' + e.kind, transform: 'translate(' + (p.x + 24) + ' ' + (p.y - 16) + ')' }, r.fx);
+        S('circle', { r: e.kind === 'drop' ? 7 : 6 }, m);
+        if (e.kind === 'drop') S('path', { d: 'M-3,-3 L3,3 M3,-3 L-3,3' }, m);
+      }
+    });
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var dur = reduce ? 1 : STEP_MS / pb.speed, t0 = performance.now();
+    function place(p) {
+      packets.forEach(function (k) {
+        var a = self._pbPos(k.from), b = self._pbPos(k.to);
+        if (!a || !b) return;
+        var e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;       // ease in and out
+        k.g.setAttribute('transform', 'translate(' + (a.x + (b.x - a.x) * e) + ' ' + (a.y + (b.y - a.y) * e) + ')');
+      });
+    }
+    place(0);
+    function tick(now) {
+      if (self.pb !== pb) return;
+      var p = Math.min(1, (now - t0) / dur);
+      place(p);
+      if (p < 1) { pb.raf = requestAnimationFrame(tick); return; }
+      self._pbDone();
+    }
+    pb.raf = requestAnimationFrame(tick);
+    this._pbButtons();
+  };
+
+  // A step finished animating: carry on when playing, otherwise wait for the user.
+  Topology.prototype._pbDone = function () {
+    var self = this, pb = this.pb;
+    if (!pb.playing) return;
+    if (pb.i >= pb.times.length - 1) { pb.playing = false; this._pbButtons(); return; }
+    pb.timer = setTimeout(function () { if (self.pb === pb && pb.playing) self._pbGo(pb.i + 1); }, GAP_MS / pb.speed);
+  };
+
+  Topology.prototype._pbButtons = function () {
+    var pb = this.pb, b = this.r.pb, last = pb.i >= pb.times.length - 1;
+    b.prev.disabled = pb.i <= 0;
+    b.next.disabled = last;
+    b.play.textContent = pb.playing ? 'Pause' : last ? 'Replay' : 'Play';
+    b.speed.textContent = pb.speed + 'x';
+  };
+
+  Topology.prototype._bindPlayback = function () {
+    var self = this, b = this.r.pb;
+    b.play.addEventListener('click', function () {
+      var pb = self.pb; if (!pb) return;
+      if (pb.playing) { pb.playing = false; clearTimeout(pb.timer); self._pbButtons(); return; }
+      pb.playing = true;
+      self._pbGo(pb.i >= pb.times.length - 1 ? 0 : pb.i + 1);
+    });
+    b.next.addEventListener('click', function () { var pb = self.pb; if (!pb) return; pb.playing = false; self._pbGo(pb.i + 1); });
+    b.prev.addEventListener('click', function () { var pb = self.pb; if (!pb) return; pb.playing = false; self._pbGo(pb.i - 1); });
+    b.speed.addEventListener('click', function () {
+      var pb = self.pb; if (!pb) return;
+      pb.speed = SPEEDS[(SPEEDS.indexOf(pb.speed) + 1) % SPEEDS.length];
+      self._pbButtons();
+    });
+    b.close.addEventListener('click', function () { self.stopPlayback(); });
+    this.r.replay.addEventListener('click', function () { self.startPlayback(); });
   };
 
   root.Topology = Topology;
