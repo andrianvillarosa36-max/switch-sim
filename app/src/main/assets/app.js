@@ -4,8 +4,10 @@
   var KEY = 'switchsim.v2';
   var $ = function (id) { return document.getElementById(id); };
 
-  var devView, topo;
+  var devView, topo, labs, labsUI;
   var consoleDev = null;       // device whose screen is open, if any
+  var labsOpen = false;        // the My labs screen is showing
+  var currentLab = null;       // id of the saved lab the working network came from
 
   /* ---------- saving (never fatal) ---------- */
 
@@ -14,16 +16,63 @@
   }
 
   function saveAll() {
-    try { localStorage.setItem(KEY, JSON.stringify({ net: topo.toJSON() })); } catch (e) { /* storage unavailable */ }
+    var snap = topo.toJSON();
+    try { localStorage.setItem(KEY, JSON.stringify({ net: snap, lab: currentLab })); } catch (e) { /* storage unavailable */ }
+    updateLabName(snap.net);
+  }
+
+  // Under the title: which saved lab this is, and whether it has unsaved changes.
+  function updateLabName(net) {
+    var el = $('labname'), text = '', lab = currentLab && labs ? labs.get(currentLab) : null;
+    if (lab) text = lab.name + (labs.isModified(currentLab, net) ? ' (changed)' : '');
+    else if (net.devices.length) text = 'Unsaved lab';
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+  // A store that works even when localStorage is blocked (labs just will not survive a restart).
+  function storage() {
+    try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); return localStorage; } catch (e) {
+      var m = {};
+      return { getItem: function (k) { return k in m ? m[k] : null; }, setItem: function (k, v) { m[k] = String(v); } };
+    }
   }
 
   /* ---------- screens ---------- */
 
   function showScreen() {
-    $('view-net').hidden = !!consoleDev;
+    $('view-net').hidden = !!consoleDev || labsOpen;
     $('view-console').hidden = !consoleDev;
-    if (!consoleDev) { topo.ensureView(); topo.render(); }
+    $('view-labs').hidden = !labsOpen;
+    $('open-labs').hidden = !!consoleDev || labsOpen;
+    if (!consoleDev && !labsOpen) { topo.ensureView(); topo.render(); }
   }
+
+  function openLabs() {
+    if (consoleDev) closeDevice();
+    topo.stopPlayback();
+    labsOpen = true;
+    showScreen();
+    labsUI.render();
+    location.hash = 'labs';          // gives the Android back button something to pop
+  }
+
+  function closeLabs() {
+    if (!labsOpen) return;
+    labsOpen = false;
+    showScreen();
+    if (location.hash === '#labs') history.back();
+  }
+
+  // Replace the working network (used when a lab is opened or a new one started).
+  function loadNet(net) {
+    consoleDev = null;
+    topo.stopPlayback();
+    topo.load({ net: net });
+  }
+
+  $('open-labs').addEventListener('click', openLabs);
+  $('labs-back').addEventListener('click', closeLabs);
 
   function selectPcTab(name) {
     var settings = name === 'settings';
@@ -78,6 +127,7 @@
 
   window.addEventListener('hashchange', function () {
     if (location.hash !== '#console' && consoleDev) closeDevice();
+    if (location.hash !== '#labs' && labsOpen) { labsOpen = false; showScreen(); }
   });
 
   $('console-back').addEventListener('click', function () {
@@ -114,6 +164,9 @@
   function boot() {
     var saved = loadState();
 
+    labs = new window.Labs(storage());
+    if (saved && saved.lab && labs.get(saved.lab)) currentLab = saved.lab;
+
     devView = new window.TerminalView($('console-host'), { onCommand: function () { saveAll(); updateWatch(); } });
 
     topo = new window.Topology({
@@ -125,6 +178,17 @@
       pb: { step: $('pstep'), lines: $('plines'), prev: $('p-prev'), play: $('p-play'), next: $('p-next'), speed: $('p-speed'), close: $('p-close') }
     }, { onChange: saveAll, openConsole: openDevice });
     if (saved && saved.net) topo.load(saved.net);
+
+    labsUI = new window.LabsUI({
+      labs: labs,
+      getNet: function () { return topo.toJSON().net; },
+      loadNet: loadNet,
+      getCurrent: function () { return currentLab; },
+      setCurrent: function (id) { currentLab = id; saveAll(); },
+      afterLoad: function () { closeLabs(); topo.fit(); },
+      changed: saveAll
+    });
+    updateLabName(topo.toJSON().net);
 
     window.addEventListener('resize', function () { if (!consoleDev) topo.ensureView(); });
     showScreen();

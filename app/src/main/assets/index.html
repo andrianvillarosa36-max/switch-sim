@@ -10,7 +10,11 @@
 <body>
   <div class="app">
     <header class="top">
-      <h1 class="brand">Switch Sim</h1>
+      <div class="brandbox">
+        <h1 class="brand">Switch Sim</h1>
+        <span id="labname" class="labname" hidden></span>
+      </div>
+      <button id="open-labs" class="ghost" type="button">Labs</button>
     </header>
 
     <!-- Network: topology canvas -->
@@ -46,6 +50,39 @@
           <button id="p-speed" class="abtn" type="button">1x</button>
           <button id="p-close" class="abtn" type="button">Close</button>
         </div>
+      </div>
+    </section>
+
+    <!-- My labs: saved networks, sharing and importing -->
+    <section id="view-labs" class="labsview" hidden>
+      <div class="consolebar">
+        <button id="labs-back" class="ghost" type="button">Back</button>
+        <span class="ctitle">My labs</span>
+      </div>
+      <div class="labsbody">
+        <p id="labs-current" class="lede"></p>
+        <form id="labs-save" class="saverow" autocomplete="off">
+          <input id="labs-name" type="text" maxlength="40" autocomplete="off" spellcheck="false" placeholder="Name this lab" aria-label="Lab name">
+          <button type="submit" class="send">Save</button>
+        </form>
+        <p id="labs-msg" class="pcmsg" aria-live="polite"></p>
+        <div id="labs-list"></div>
+        <div class="labsrow"><button id="labs-new" class="ghost" type="button">New empty lab</button></div>
+
+        <div id="labs-share" hidden>
+          <h3>Share this lab</h3>
+          <p class="lede">Send this text to a friend. They paste it under Import.</p>
+          <textarea id="labs-code" rows="4" readonly aria-label="Lab code"></textarea>
+          <div class="labsrow">
+            <button id="labs-copy" class="abtn" type="button">Copy</button>
+            <button id="labs-send" class="abtn primary" type="button" hidden>Share...</button>
+            <button id="labs-share-close" class="ghost" type="button">Close</button>
+          </div>
+        </div>
+
+        <h3>Import a lab</h3>
+        <textarea id="labs-import" rows="3" placeholder="Paste a lab code here" aria-label="Paste a lab code" spellcheck="false" autocapitalize="none"></textarea>
+        <div class="labsrow"><button id="labs-import-btn" class="abtn" type="button">Import</button></div>
       </div>
     </section>
 
@@ -89,6 +126,8 @@
   <script src="network.js"></script>
   <script src="terminal.js"></script>
   <script src="topology.js"></script>
+  <script src="labs.js"></script>
+  <script src="labsui.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

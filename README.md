@@ -41,6 +41,15 @@ Works offline.
   (any address is turned into its classful network), `passive-interface g0/0`,
   `no auto-summary`, `no router rip`. Check it with `show ip route` (RIP routes are `R`,
   distance 120, metric = hop count) and `show ip protocols`.
+- **My labs:** tap **Labs** at the top. Save the current network under a name, and it appears under
+  the title (with "(changed)" when you have edited it since). From the Labs screen you can open
+  a saved lab, **Update** it with your changes, **Revert** to the saved version, **Share** it, or
+  delete it. Opening a lab or starting a new one over unsaved work asks you to tap twice first.
+  A lab keeps devices, cables, positions, switch and router configurations (saved or not), VLANs and PC
+  settings. It does not keep MAC tables, ARP caches or packet traces, which rebuild as you use it.
+- **Share a lab:** **Share** shows a text code (`SwitchSimLab1|name|...`). **Copy** puts it on the
+  clipboard and **Share...** (in the app) opens the Android share sheet. Your friend pastes it into
+  **Import a lab**, which saves it as a new lab (renamed if the name is taken) for them to open.
 - **Watch the packets:** after a `ping` on a PC or router, tap **Watch** (or **Replay** on the
   canvas). The player steps through the traffic one cable hop at a time: ARP requests
   flooding out of a switch, the switch learning a MAC address, VLAN-tagged frames on trunks,
@@ -123,7 +132,8 @@ Run `clear mac address-table dynamic`, ping again, and watch it relearn.
   - `router.js` the simulated IOS router
   - `network.js` devices, ports, cables, PC settings (no drawing code)
   - `topology.js` the canvas: drawing, touch gestures, cable mode, selection bar
-  - `terminal.js` the console component shared by switches and PCs
+  - `terminal.js` the console component shared by switches, routers and PCs
+  - `labs.js`, `labsui.js` saved labs, share codes and the My labs screen
   - `app.js`, `index.html`, `style.css`
 - `app/src/main/java/.../MainActivity.java` is a thin Android WebView around those files.
 - `.github/workflows/build.yml` runs the tests, then builds a debug APK.
@@ -138,7 +148,7 @@ cp -r ~/switch-sim-new/switch-sim/. ~/switch-sim/
 rm -f ~/switch-sim/app/src/main/assets/lesson1.js      # the lesson was removed
 cd ~/switch-sim
 git add -A
-git commit -m "Packet animation and RIP"
+git commit -m "My labs: save, share, import"
 git push
 ```
 
@@ -151,7 +161,7 @@ topology and switch configurations.
 ```sh
 cd app/src/main/assets
 python -m http.server 8080                 # open http://localhost:8080 in the phone browser
-cd ../../../.. && for t in engine network netsim vlan router trace rip; do node tests/$t.test.js; done
+cd ../../../.. && for t in engine network netsim vlan router trace rip labs; do node tests/$t.test.js; done
 ```
 
 ## Roadmap
@@ -160,7 +170,7 @@ cd ../../../.. && for t in engine network netsim vlan router trace rip; do node 
 2. PCs with IP settings and ping through switches with MAC learning (done)
 3. VLANs and trunks that actually affect traffic (done)
 4. Routers, static routes, inter-VLAN routing (done)
-5. Packet animation (done), then saved topologies and labs that check the whole network
+5. Packet animation, saved and shareable labs (done), then labs that check the whole network
 
 ## App icon
 
@@ -174,4 +184,8 @@ as the GitHub repository picture.
 - Topology and configurations are saved in the WebView's local storage. ARP caches and MAC
   tables are not saved (like a power cycle).
 - Switch table output is spaced a little tighter than a real switch so it fits a phone screen.
+- The Android shell exposes two small functions to the page (copy to clipboard, open the share
+  sheet) for lab codes. The page only ever loads the bundled files.
+- Saved labs live in the same local storage as your working network, so uninstalling the app
+  removes them. Share a lab to keep a copy elsewhere.
 - The debug APK is signed with a debug key, which is fine for your own phone.

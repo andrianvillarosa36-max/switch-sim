@@ -22,6 +22,7 @@ jobs:
           node tests/router.test.js
           node tests/trace.test.js
           node tests/rip.test.js
+          node tests/labs.test.js
 
       - uses: actions/setup-java@v4
         with:
